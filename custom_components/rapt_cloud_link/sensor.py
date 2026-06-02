@@ -13,6 +13,60 @@ from .base import BaseRaptSensor
 _LOGGER = logging.getLogger(__name__)
 
 
+BREWZILLA_EXTERNAL_TEMP_CANDIDATE_KEYS = (
+    "externalTemperature",
+    "external_temperature",
+    "externalTemp",
+    "external_temp",
+    "probeTemperature",
+    "probe_temperature",
+    "probeTemp",
+    "probe_temp",
+    "bleTemperature",
+    "ble_temperature",
+    "bluetoothTemperature",
+    "bluetooth_temperature",
+    "mashTemperature",
+    "mash_temperature",
+    "mashTemp",
+    "mash_temp",
+    "temperature2",
+    "temperature_2",
+)
+
+
+def _debug_first_telemetry_item(device: dict) -> dict:
+    """Return first telemetry-like payload item without requiring prior BA helpers."""
+    for key in ("telemetry", "telemetries", "readings", "values"):
+        telemetry = device.get(key)
+        if isinstance(telemetry, list) and telemetry and isinstance(telemetry[0], dict):
+            return telemetry[0]
+        if isinstance(telemetry, dict):
+            return telemetry
+    return {}
+
+
+def _debug_get_value(device: dict, key: str):
+    """Return value from root payload or first telemetry payload."""
+    if key in device and device.get(key) is not None:
+        return device.get(key)
+    telemetry = _debug_first_telemetry_item(device)
+    if key in telemetry and telemetry.get(key) is not None:
+        return telemetry.get(key)
+    return None
+
+
+def _debug_pick_values(device: dict, keys: tuple[str, ...]) -> dict:
+    """Return non-empty candidate values from a device payload."""
+    values = {}
+    for key in keys:
+        value = _debug_get_value(device, key)
+        if value not in (None, ""):
+            values[key] = value
+    return values
+
+
+
 TELEMETRY_KEYS = ("telemetry", "telemetries", "readings", "values")
 UPDATED_AT_KEYS = (
     "updatedAt",
@@ -123,6 +177,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             sensors.append(BondedDeviceBatterySensor(bonded_devices_coordinator, device_id))
             sensors.append(BondedDeviceConnectionStateSensor(bonded_devices_coordinator, device_id))
 
+    # BrewAssistant diagnostics: expose BrewZilla raw discovery state.
+    sensors.append(BrewZillaDebugSensor(brewzilla_coordinator))
+
     # BrewZilla
     for device_id, device in brewzilla_coordinator.data.items():
         # name = device.get("name", f"BrewZilla {device_id}")
@@ -196,6 +253,60 @@ class BondedDevicesDebugSensor(CoordinatorEntity, SensorEntity):
                     if isinstance(device, dict)
                 }
             ),
+            "devices": devices,
+        }
+
+
+
+
+class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor exposing BrewZilla payload metadata."""
+
+    _attr_name = "RAPT Cloud Link BrewZilla Debug"
+    _attr_unique_id = "rapt_cloud_link_brewzilla_debug"
+    _attr_icon = "mdi:kettle-alert"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data or {}
+        return len(data)
+
+    @property
+    def extra_state_attributes(self):
+        data = self.coordinator.data or {}
+        devices = []
+
+        for device_id, device in data.items():
+            telemetry = _debug_first_telemetry_item(device)
+            external_candidates = _debug_pick_values(
+                device,
+                BREWZILLA_EXTERNAL_TEMP_CANDIDATE_KEYS,
+            )
+
+            devices.append(
+                {
+                    "id": device_id,
+                    "name": device.get("name"),
+                    "device_type": device.get("deviceType"),
+                    "temperature": _debug_get_value(device, "temperature"),
+                    "target_temperature": _debug_get_value(device, "targetTemperature"),
+                    "connection_state": _debug_get_value(device, "connectionState"),
+                    "heating": _debug_get_value(device, "heating"),
+                    "pump": _debug_get_value(device, "pump"),
+                    "heat_utilization": _debug_get_value(device, "heatUtilization"),
+                    "pump_utilization": _debug_get_value(device, "pumpUtilization"),
+                    "external_temperature_candidates": external_candidates,
+                    "payload_keys": sorted(device.keys()),
+                    "telemetry_keys": sorted(telemetry.keys()) if telemetry else [],
+                }
+            )
+
+        return {
+            "ba_source": "rapt_cloud_link_brewzilla_debug",
+            "device_count": len(data),
             "devices": devices,
         }
 
