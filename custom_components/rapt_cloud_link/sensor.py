@@ -3,8 +3,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.sensor import (
     SensorDeviceClass,
+    SensorEntity,
     SensorStateClass,
 )
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import BONDED_DEVICE_TYPES, CONF_TEMPERATURE_UNIT, DEFAULT_TEMPERATURE_UNIT, DOMAIN
 from .base import BaseRaptSensor
 
@@ -105,6 +107,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     sensors = []
 
+    # BrewAssistant diagnostics: always expose bonded device discovery state.
+    sensors.append(BondedDevicesDebugSensor(bonded_devices_coordinator))
+
     # Bonded Devices
     for device_id, device in bonded_devices_coordinator.data.items():
         if device.get("deviceType") in BONDED_DEVICE_TYPES:
@@ -140,6 +145,59 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     # Add sensors if any
     if sensors:
         async_add_entities(sensors, update_before_add=True)
+
+
+
+
+class BondedDevicesDebugSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor exposing bonded device discovery metadata."""
+
+    _attr_name = "RAPT Cloud Link Bonded Devices Debug"
+    _attr_unique_id = "rapt_cloud_link_bonded_devices_debug"
+    _attr_icon = "mdi:bluetooth-searching"
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data or {}
+        return len(data)
+
+    @property
+    def extra_state_attributes(self):
+        data = self.coordinator.data or {}
+        devices = []
+
+        for device_id, device in data.items():
+            telemetry = _first_telemetry_item(device)
+            devices.append(
+                {
+                    "id": device_id,
+                    "name": device.get("name"),
+                    "device_type": device.get("deviceType"),
+                    "temperature": _get_device_value(device, "temperature"),
+                    "battery": _get_device_value(device, "battery"),
+                    "connection_state": _get_device_value(device, "connectionState"),
+                    "parent_device_id": _get_first_existing_value(device, PARENT_DEVICE_ID_KEYS),
+                    "updated_at": _get_first_existing_value(device, UPDATED_AT_KEYS),
+                    "payload_keys": sorted(device.keys()),
+                    "telemetry_keys": sorted(telemetry.keys()) if telemetry else [],
+                }
+            )
+
+        return {
+            "ba_source": "rapt_cloud_link_bonded_devices_debug",
+            "device_count": len(data),
+            "device_types": sorted(
+                {
+                    device.get("deviceType", "unknown")
+                    for device in data.values()
+                    if isinstance(device, dict)
+                }
+            ),
+            "devices": devices,
+        }
 
 
 # ---------------------
