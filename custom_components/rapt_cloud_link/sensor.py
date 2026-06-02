@@ -137,8 +137,63 @@ def _rounded_device_value(device: dict, key: str, digits: int = 1):
 
 
 
+
+def _numeric_payload_value(value):
+    """Return a float payload value, or None if not numeric."""
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _valid_control_device_temperature(value) -> bool:
+    """Return whether a control-device temperature looks like real BLE data."""
+    numeric = _numeric_payload_value(value)
+    if numeric is None:
+        return False
+
+    # RAPT/BrewZilla can expose 0.0 when no cloud-side BLE value is available.
+    # Treat that as unavailable, not as a real mash temperature.
+    return abs(numeric) > 0.001
+
+
+def _control_device_temperature_snapshot(device: dict) -> dict:
+    """Return root, telemetry and selected control-device temperature metadata."""
+    telemetry = _first_telemetry_item(device)
+
+    root_raw = device.get("controlDeviceTemperature") if isinstance(device, dict) else None
+    telemetry_raw = telemetry.get("controlDeviceTemperature") if isinstance(telemetry, dict) else None
+
+    root_value = _numeric_payload_value(root_raw)
+    telemetry_value = _numeric_payload_value(telemetry_raw)
+
+    selected = None
+    selected_source = None
+
+    # Prefer telemetry. It is usually the fresher cloud observation.
+    if _valid_control_device_temperature(telemetry_value):
+        selected = telemetry_value
+        selected_source = "telemetry"
+    elif _valid_control_device_temperature(root_value):
+        selected = root_value
+        selected_source = "root"
+
+    rejected = selected is None and (root_raw not in (None, "") or telemetry_raw not in (None, ""))
+
+    return {
+        "root_control_device_temperature": round(root_value, 1) if root_value is not None else None,
+        "telemetry_control_device_temperature": round(telemetry_value, 1) if telemetry_value is not None else None,
+        "selected_control_device_temperature": round(selected, 1) if selected is not None else None,
+        "selected_control_device_temperature_source": selected_source,
+        "ba_value_rejected": rejected,
+        "ba_reject_reason": "control_device_temperature_zero_or_invalid" if rejected else None,
+    }
+
 def _brewzilla_control_device_attributes(device: dict, device_id: str) -> dict:
     """Return metadata for BrewZilla external/control-device temperature."""
+    control_temp = _control_device_temperature_snapshot(device)
     attrs = {
         "ba_source": "rapt_cloud_link_brewzilla_control_device",
         "raw_device_id": device_id,
@@ -146,6 +201,7 @@ def _brewzilla_control_device_attributes(device: dict, device_id: str) -> dict:
         "control_device_mac_address": _get_device_value(device, "controlDeviceMacAddress"),
         "use_internal_sensor": _get_device_value(device, "useInternalSensor"),
         "sensor_differential": _get_device_value(device, "sensorDifferential"),
+        **control_temp,
     }
     return {key: value for key, value in attrs.items() if value not in (None, "", [])}
 
@@ -312,7 +368,12 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                     "name": device.get("name"),
                     "device_type": device.get("deviceType"),
                     "temperature": _debug_get_value(device, "temperature"),
-                    "control_device_temperature": _debug_get_value(device, "controlDeviceTemperature"),
+                    "control_device_temperature": _control_device_temperature_snapshot(device).get("selected_control_device_temperature"),
+                    "root_control_device_temperature": _control_device_temperature_snapshot(device).get("root_control_device_temperature"),
+                    "telemetry_control_device_temperature": _control_device_temperature_snapshot(device).get("telemetry_control_device_temperature"),
+                    "selected_control_device_temperature_source": _control_device_temperature_snapshot(device).get("selected_control_device_temperature_source"),
+                    "ba_value_rejected": _control_device_temperature_snapshot(device).get("ba_value_rejected"),
+                    "ba_reject_reason": _control_device_temperature_snapshot(device).get("ba_reject_reason"),
                     "control_device_type": _debug_get_value(device, "controlDeviceType"),
                     "control_device_mac_address": _debug_get_value(device, "controlDeviceMacAddress"),
                     "use_internal_sensor": _debug_get_value(device, "useInternalSensor"),
@@ -400,7 +461,7 @@ class BrewZillaControlDeviceTemperatureSensor(BaseRaptSensor):
         device = self.coordinator.data.get(self._device_id)
         if not device:
             return None
-        return _rounded_device_value(device, "controlDeviceTemperature", 1)
+        return _control_device_temperature_snapshot(device).get("selected_control_device_temperature")
 
     @property
     def extra_state_attributes(self):
@@ -436,7 +497,7 @@ class BrewZillaBleThermometerTemperatureSensor(BaseRaptSensor):
         device = self.coordinator.data.get(self._device_id)
         if not device:
             return None
-        return _rounded_device_value(device, "controlDeviceTemperature", 1)
+        return _control_device_temperature_snapshot(device).get("selected_control_device_temperature")
 
     @property
     def extra_state_attributes(self):
