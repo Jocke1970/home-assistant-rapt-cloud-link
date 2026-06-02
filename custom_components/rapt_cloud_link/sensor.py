@@ -14,6 +14,10 @@ _LOGGER = logging.getLogger(__name__)
 
 
 BREWZILLA_EXTERNAL_TEMP_CANDIDATE_KEYS = (
+    "controlDeviceTemperature",
+    "control_device_temperature",
+    "controlDeviceTemp",
+    "control_device_temp",
     "externalTemperature",
     "external_temperature",
     "externalTemp",
@@ -132,6 +136,20 @@ def _rounded_device_value(device: dict, key: str, digits: int = 1):
         return None
 
 
+
+def _brewzilla_control_device_attributes(device: dict, device_id: str) -> dict:
+    """Return metadata for BrewZilla external/control-device temperature."""
+    attrs = {
+        "ba_source": "rapt_cloud_link_brewzilla_control_device",
+        "raw_device_id": device_id,
+        "control_device_type": _get_device_value(device, "controlDeviceType"),
+        "control_device_mac_address": _get_device_value(device, "controlDeviceMacAddress"),
+        "use_internal_sensor": _get_device_value(device, "useInternalSensor"),
+        "sensor_differential": _get_device_value(device, "sensorDifferential"),
+    }
+    return {key: value for key, value in attrs.items() if value not in (None, "", [])}
+
+
 def _bonded_device_attributes(device: dict) -> dict:
     """Return BrewAssistant-friendly metadata for bonded devices."""
     telemetry = _first_telemetry_item(device)
@@ -184,6 +202,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     for device_id, device in brewzilla_coordinator.data.items():
         # name = device.get("name", f"BrewZilla {device_id}")
         sensors.append(BrewZillaTemperatureSensor(brewzilla_coordinator, device_id))
+        sensors.append(BrewZillaControlDeviceTemperatureSensor(brewzilla_coordinator, device_id))
+        sensors.append(BrewZillaBleThermometerTemperatureSensor(brewzilla_coordinator, device_id))
         sensors.append(BrewZillaConnectionStateSensor(brewzilla_coordinator, device_id))
 
     # Hydrometer
@@ -292,12 +312,17 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                     "name": device.get("name"),
                     "device_type": device.get("deviceType"),
                     "temperature": _debug_get_value(device, "temperature"),
+                    "control_device_temperature": _debug_get_value(device, "controlDeviceTemperature"),
+                    "control_device_type": _debug_get_value(device, "controlDeviceType"),
+                    "control_device_mac_address": _debug_get_value(device, "controlDeviceMacAddress"),
+                    "use_internal_sensor": _debug_get_value(device, "useInternalSensor"),
+                    "sensor_differential": _debug_get_value(device, "sensorDifferential"),
                     "target_temperature": _debug_get_value(device, "targetTemperature"),
                     "connection_state": _debug_get_value(device, "connectionState"),
-                    "heating": _debug_get_value(device, "heating"),
-                    "pump": _debug_get_value(device, "pump"),
-                    "heat_utilization": _debug_get_value(device, "heatUtilization"),
-                    "pump_utilization": _debug_get_value(device, "pumpUtilization"),
+                    "heating_enabled": _debug_get_value(device, "heatingEnabled"),
+                    "pump_enabled": _debug_get_value(device, "pumpEnabled"),
+                    "heating_utilisation": _debug_get_value(device, "heatingUtilisation"),
+                    "pump_utilisation": _debug_get_value(device, "pumpUtilisation"),
                     "external_temperature_candidates": external_candidates,
                     "payload_keys": sorted(device.keys()),
                     "telemetry_keys": sorted(telemetry.keys()) if telemetry else [],
@@ -348,6 +373,84 @@ class BrewZillaTemperatureSensor(BaseRaptSensor):
             "ba_temperature_role": "wort_or_kettle_temperature",
             "raw_device_id": self._device_id,
         }
+
+
+class BrewZillaControlDeviceTemperatureSensor(BaseRaptSensor):
+    """BrewZilla external/control-device temperature sensor."""
+
+    def __init__(self, coordinator, device_id: str):
+        super().__init__(
+            coordinator,
+            device_id,
+            model="BrewZilla",
+            name_suffix="Control Device Temperature",
+            unique_suffix="control_device_temperature",
+            unit="°C",
+        )
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def unit_of_measurement(self):
+        unit = self.coordinator.config_entry.data.get(CONF_TEMPERATURE_UNIT, DEFAULT_TEMPERATURE_UNIT)
+        return "°F" if unit == "F" else "°C"
+
+    @property
+    def native_value(self):
+        device = self.coordinator.data.get(self._device_id)
+        if not device:
+            return None
+        return _rounded_device_value(device, "controlDeviceTemperature", 1)
+
+    @property
+    def extra_state_attributes(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        attrs = _brewzilla_control_device_attributes(device, self._device_id)
+        attrs["ba_temperature_role"] = "candidate_mash_temperature"
+        attrs["ba_sensor_role"] = "brewzilla_control_device_temperature"
+        return attrs
+
+
+class BrewZillaBleThermometerTemperatureSensor(BaseRaptSensor):
+    """Logical BLE thermometer sensor backed by BrewZilla control-device payload."""
+
+    def __init__(self, coordinator, device_id: str):
+        super().__init__(
+            coordinator,
+            device_id,
+            model="RAPT BLE Thermometer",
+            name_suffix="BLE Thermometer Temperature",
+            unique_suffix="ble_thermometer_temperature",
+            unit="°C",
+        )
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def unit_of_measurement(self):
+        unit = self.coordinator.config_entry.data.get(CONF_TEMPERATURE_UNIT, DEFAULT_TEMPERATURE_UNIT)
+        return "°F" if unit == "F" else "°C"
+
+    @property
+    def native_value(self):
+        device = self.coordinator.data.get(self._device_id)
+        if not device:
+            return None
+        return _rounded_device_value(device, "controlDeviceTemperature", 1)
+
+    @property
+    def extra_state_attributes(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        attrs = _brewzilla_control_device_attributes(device, self._device_id)
+        attrs.update(
+            {
+                "ba_temperature_role": "mash_temperature",
+                "ba_sensor_role": "ble_thermometer_temperature",
+                "linked_brewzilla_id": self._device_id,
+                "source_payload_key": "controlDeviceTemperature",
+            }
+        )
+        return attrs
 
 
 class BrewZillaConnectionStateSensor(BaseRaptSensor):
