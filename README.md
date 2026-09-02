@@ -1,6 +1,16 @@
-# RAPT Cloud Integration for Home Assistant
+# RAPT Cloud Link for Home Assistant — BrewAssistant branch
 
 ![hacs_badge](https://img.shields.io/badge/HACS-Custom-blue.svg)
+
+> [!IMPORTANT]
+> This is the **BrewAssistant-adapted branch** of RAPT Cloud Link.
+> It adds BrewAssistant metadata, BLE/control-device temperature handling and
+> diagnostic sensors while retaining the original `rapt_cloud_link` integration
+> domain. See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for the complete
+> change history, current limitations and upstream synchronization checklist.
+>
+> Branch: `ba/brewassistant-rapt-cloud-link`  
+> Upstream: [`berra200/home-assistant-rapt-cloud-link`](https://github.com/berra200/home-assistant-rapt-cloud-link)
 
 This is a custom integration for Home Assistant that connects to [RAPT Cloud](https://app.rapt.io) and allows you to monitor and control your BrewZilla, RAPT Pill, or other RAPT-compatible brewing devices.
 
