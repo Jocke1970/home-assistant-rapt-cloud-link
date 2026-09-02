@@ -14,6 +14,14 @@
 
 This is a custom integration for Home Assistant that connects to [RAPT Cloud](https://app.rapt.io) and allows you to monitor and control your BrewZilla, RAPT Pill, or other RAPT-compatible brewing devices.
 
+## Credits
+
+RAPT Cloud Link was originally created by [berra200](https://github.com/berra200).
+This fork retains the original project's MIT license and copyright notice.
+The BrewAssistant-specific adaptations are maintained by
+[Jocke1970](https://github.com/Jocke1970) and are documented in
+[BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md).
+
 ## Features
 
 - Cloud polling for real-time updates from your devices.
