@@ -14,3 +14,17 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             return {device["id"]: device for device in devices if "id" in device}
         except Exception as err:
             raise UpdateFailed(f"Failed to fetch BrewZilla data: {err}") from err
+
+    async def async_start_profile_session(self, device_id: str, profile_id: str, name: str):
+        """Start a RAPT profile on a BrewZilla and refresh live state."""
+        api = await self._get_token_and_api(BrewZillaAPI)
+        result = await api.start_profile_session(device_id, profile_id, name)
+        await self.async_request_refresh()
+        return result
+
+    async def async_end_profile_session(self, device_id: str):
+        """End the active RAPT profile on a BrewZilla and refresh live state."""
+        api = await self._get_token_and_api(BrewZillaAPI)
+        result = await api.end_profile_session(device_id)
+        await self.async_request_refresh()
+        return result

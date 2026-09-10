@@ -22,10 +22,16 @@ rebased into the BrewAssistant branch and verified there.
 ## Current branch delta
 
 As of 2026-09-10, the BrewAssistant branch carries the original five
-BrewAssistant functional commits plus later maintenance and discovery work.
-The BrewAssistant source changes remain concentrated in:
+BrewAssistant functional commits plus later maintenance, discovery and
+BrewZilla profile-runtime work. BrewAssistant-specific source changes now
+include:
 
 - `custom_components/rapt_cloud_link/sensor.py`
+- `custom_components/rapt_cloud_link/binary_sensor.py`
+- `custom_components/rapt_cloud_link/api/brewzilla_api.py`
+- `custom_components/rapt_cloud_link/coordinator/brewzilla_coordinator.py`
+- `custom_components/rapt_cloud_link/__init__.py`
+- `services.yaml`
 
 The original five BrewAssistant commits, oldest first, are:
 
@@ -177,31 +183,67 @@ Diagnostic attributes include:
 
 ### 8. Active BrewZilla profile/session discovery
 
-A live BrewZilla test on 2026-09-10 established an important distinction:
+Live BrewZilla testing on 2026-09-10 established the profile runtime
+contract:
 
-- merely downloading a RAPT brewing profile to the BrewZilla did not add
+- merely downloading a RAPT brewing profile to the BrewZilla does not add
   profile-related fields to the `GetBrewZillas` payload;
-- once the profile was started on the BrewZilla, the root payload exposed
+- once the local profile runner starts, the root payload exposes
   `activeProfileId`, `activeProfileStepId` and `activeProfileSession`;
-- active telemetry exposed `profileId` and `profileStepId`.
+- active telemetry exposes `profileId` and `profileStepId`;
+- `activeProfileSession.profile` contains the profile and its steps;
+- moving from one profile step to the next changes both root
+  `activeProfileStepId` and telemetry `profileStepId`, while
+  `targetTemperature` follows the active step;
+- after a fresh poll following STOP, the root `activeProfile*` fields and
+  telemetry `profileId`/`profileStepId` disappear.
 
-The BrewZilla debug sensor therefore includes a bounded `profile_runtime`
-snapshot intended to discover the exact runtime contract without exposing
-the complete raw profile/session object.
+The BrewZilla debug sensor retains the bounded `profile_runtime` snapshot for
+troubleshooting. It remains diagnostic and is not the operational contract
+used by BrewAssistant.
 
-The snapshot includes, where available:
+### 9. Operational BrewZilla profile runtime and remote control
 
-- root `active_profile_id` and `active_profile_step_id`;
-- telemetry profile/session identifiers and progress candidates;
-- `activeProfileSession` keys and selected timing fields;
-- nested profile ID/name/keys when the session embeds a profile object;
-- profile step count and the union of available step keys;
-- a maximum 20-step preview containing only process-relevant fields such as
-  target temperature, control/end/duration types, pump settings, heating
-  utilisation, PID state and sensor differential.
+The branch adds a dedicated binary sensor for each BrewZilla:
 
-This is discovery instrumentation only. It does not yet make a RAPT profile
-the BrewAssistant process source and it does not change BrewZilla control.
+- name suffix: `Profile Active`
+- unique suffix: `profile_active`
+- `ba_source: rapt_cloud_link_brewzilla_profile_runtime`
+
+The binary sensor is ON while an active profile ID and concrete
+`activeProfileSession` are present. Activity deliberately does not depend
+only on `activeProfileStepId`; a transient step handoff must not be mistaken
+for a confirmed profile STOP.
+
+Attributes expose a compact operational contract including:
+
+- profile ID, name, session ID, session start and profile length;
+- current step ID, number, name, target, control/end/duration types, length
+  and PID state;
+- next step ID, name and target;
+- total step count and a normalized maximum 32-step profile list.
+
+The branch also mirrors the RAPT Portal profile-session commands discovered
+and verified live on 2026-09-10:
+
+- `POST /ProfileSessions/StartProfileSession`
+- `GET /ProfileSessions/EndBrewZillaProfileSession?brewZillaId=...`
+
+Home Assistant services are registered as:
+
+- `rapt_cloud_link.start_brewzilla_profile`
+- `rapt_cloud_link.end_brewzilla_profile`
+
+The start service sends the observed portal payload fields `brewZillaId`,
+`profileId`, `name`, `sentAlerts: []` and `startDate: null`. The end service
+mirrors the portal's observed GET request. Both commands request a fresh
+`GetBrewZillas` update afterwards; runtime state is not changed
+optimistically.
+
+The start response contains the concrete profile session and full profile.
+The end response confirms that the cloud command was accepted, but
+BrewAssistant should treat disappearance of the `activeProfile*` fields in a
+fresh `GetBrewZillas` result as the authoritative STOP confirmation.
 
 ## BrewAssistant usage intent
 
@@ -218,14 +260,19 @@ During Chill and Transfer the Cooling/CFC backend may use the same physical
 BLE thermometer as the CFC wort-out temperature. BrewZilla's internal
 temperature remains available throughout the brew day.
 
-For active RAPT brewing profiles, the working architecture is that the
-BrewZilla remains the local profile executor while BrewAssistant observes
-and supervises the active profile/session through RAPT Cloud Link. The exact
-runtime mapping will be implemented in BrewAssistant only after the live
-payload contract has been verified.
+For active RAPT brewing profiles, the architecture is:
 
-That lifecycle is implemented in BrewAssistant. This fork only makes the
-RAPT data and source metadata available to Home Assistant.
+- BrewZilla is the local profile executor;
+- RAPT Cloud Link is the live runtime/command transport;
+- BrewAssistant is the supervisor/orchestrator;
+- an active BrewZilla profile outranks Brewfather Brew Tracker as the
+  process-runtime source;
+- Brewfather can still provide recipe metadata independently;
+- a RAPT profile STOP must be confirmed from fresh RCL data before
+  BrewAssistant performs its safe-off cleanup.
+
+The lifecycle and source arbitration are implemented in BrewAssistant. This
+fork provides the RAPT data and command surface.
 
 ## Known limitations
 
@@ -237,15 +284,16 @@ RAPT data and source metadata available to Home Assistant.
   process temperature.
 - The two dedicated external-temperature sensors currently mirror the same
   selected payload value.
-- Profile/session discovery currently relies on fields present in the
-  `GetBrewZillas` response while a local BrewZilla profile is active.
-- The `profile_runtime` step preview is capped at 20 steps and intentionally
-  excludes unknown/raw nested content.
+- Profile runtime depends on the live `GetBrewZillas` contract observed on
+  2026-09-10; RAPT does not currently document these runtime fields in the
+  public API as a stable BrewAssistant contract.
+- The operational profile list is capped at 32 normalized steps to avoid
+  exposing the recursive/raw profile-session graph in Home Assistant state.
+- Remote start currently requires BrewZilla ID, profile ID and profile name;
+  profile discovery/selection is not yet exposed as a Home Assistant select.
 - The debug sensors can expose device identifiers, MAC addresses and payload
   structure in Home Assistant state attributes. Treat exported diagnostics
   accordingly.
-- All custom code currently lives in `sensor.py`, so upstream edits to that
-  file are the most likely source of merge conflicts.
 
 ## Upstream synchronization checklist
 
@@ -253,7 +301,8 @@ RAPT data and source metadata available to Home Assistant.
 2. Update the fork's `main` from upstream `main`.
 3. Merge or rebase the updated `main` into
    `ba/brewassistant-rapt-cloud-link`.
-4. Review every conflict in `custom_components/rapt_cloud_link/sensor.py`.
+4. Review conflicts in every BrewAssistant-modified source file listed in
+   the current branch delta above.
 5. Compare `main...ba/brewassistant-rapt-cloud-link` and update this
    document if the branch delta changed.
 6. Validate Python syntax and Home Assistant integration setup.
@@ -266,8 +315,10 @@ RAPT data and source metadata available to Home Assistant.
    - zero/invalid control-device values become unavailable and carry the
      rejection diagnostics;
    - `profile_runtime` stays structurally safe when no profile is active;
-   - when a BrewZilla profile is active, the profile/session discovery fields
-     reflect the root and telemetry payload.
+   - `binary_sensor.brewzilla_profile_active` (or the device-derived entity
+     id) turns ON/OFF with a live profile and exposes current/next step data;
+   - start/end profile services load and refresh `GetBrewZillas` after a
+     successful command.
 8. Commit the synchronization and any documentation update to the
    BrewAssistant branch.
 

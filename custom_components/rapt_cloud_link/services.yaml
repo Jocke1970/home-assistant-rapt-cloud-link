@@ -1,0 +1,37 @@
+start_brewzilla_profile:
+  name: Start BrewZilla profile
+  description: Start a RAPT brewing profile on a BrewZilla through RAPT Cloud.
+  fields:
+    brewzilla_id:
+      name: BrewZilla ID
+      description: RAPT device ID of the BrewZilla.
+      required: true
+      example: aeddf31e-92a3-4768-9b78-a423fedb2b4f
+      selector:
+        text:
+    profile_id:
+      name: Profile ID
+      description: RAPT profile ID to start.
+      required: true
+      example: 38964d83-a6de-48ee-a153-66e828058d28
+      selector:
+        text:
+    name:
+      name: Profile name
+      description: Name sent with the RAPT profile-session request.
+      required: true
+      example: BrewZilla 35L Gen 4 6l batch - No sparge
+      selector:
+        text:
+
+end_brewzilla_profile:
+  name: End BrewZilla profile
+  description: End the active RAPT brewing profile on a BrewZilla through RAPT Cloud.
+  fields:
+    brewzilla_id:
+      name: BrewZilla ID
+      description: RAPT device ID of the BrewZilla.
+      required: true
+      example: aeddf31e-92a3-4768-9b78-a423fedb2b4f
+      selector:
+        text:
