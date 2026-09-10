@@ -70,6 +70,88 @@ def _debug_pick_values(device: dict, keys: tuple[str, ...]) -> dict:
     return values
 
 
+def _debug_profile_runtime_snapshot(device: dict) -> dict:
+    """Return a bounded snapshot of BrewZilla active profile/session data."""
+    telemetry = _debug_first_telemetry_item(device)
+
+    session = device.get("activeProfileSession")
+    if not isinstance(session, dict):
+        session = {}
+
+    profile = session.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
+
+    raw_steps = profile.get("steps")
+    steps = raw_steps if isinstance(raw_steps, list) else []
+
+    step_keys = sorted(
+        {
+            key
+            for step in steps
+            if isinstance(step, dict)
+            for key in step.keys()
+        }
+    )
+
+    preview_fields = (
+        "id",
+        "name",
+        "order",
+        "controlType",
+        "endType",
+        "durationType",
+        "length",
+        "temperature",
+        "minTemperature",
+        "maxTemperature",
+        "pumpEnabled",
+        "pumpUtilisation",
+        "heatingUtilisation",
+        "pidEnabled",
+        "sensorDifferential",
+    )
+    steps_preview = []
+    for step in steps[:20]:
+        if not isinstance(step, dict):
+            continue
+        steps_preview.append(
+            {
+                key: step.get(key)
+                for key in preview_fields
+                if step.get(key) is not None
+            }
+        )
+
+    session_profile_id = session.get("profileId")
+    if session_profile_id is None:
+        session_profile_id = profile.get("id")
+
+    return {
+        "active_profile_id": device.get("activeProfileId"),
+        "active_profile_step_id": device.get("activeProfileStepId"),
+        "active_profile_session_keys": sorted(session.keys()) if session else [],
+        "active_profile_session_profile_id": session_profile_id,
+        "active_profile_session_start_date": session.get("startDate"),
+        "active_profile_session_end_date": session.get("endDate"),
+        "active_profile_session_estimated_end_date": session.get("estimatedEndDate"),
+        "active_profile_session_profile_length": session.get("profileLength"),
+        "active_profile_session_current_time": session.get("currentProfileTime"),
+        "active_profile_session_remaining_time": session.get("remainingProfileTime"),
+        "profile_id": profile.get("id"),
+        "profile_name": profile.get("name"),
+        "profile_keys": sorted(profile.keys()) if profile else [],
+        "profile_steps_count": len(steps),
+        "profile_step_keys": step_keys,
+        "profile_steps_preview": steps_preview,
+        "profile_steps_truncated": len(steps) > 20,
+        "telemetry_profile_id": telemetry.get("profileId"),
+        "telemetry_profile_step_id": telemetry.get("profileStepId"),
+        "telemetry_profile_session_start_date": telemetry.get("profileSessionStartDate"),
+        "telemetry_profile_session_time": telemetry.get("profileSessionTime"),
+        "telemetry_profile_step_progress": telemetry.get("profileStepProgress"),
+    }
+
 
 TELEMETRY_KEYS = ("telemetry", "telemetries", "readings", "values")
 UPDATED_AT_KEYS = (
@@ -93,7 +175,7 @@ PARENT_DEVICE_ID_KEYS = (
 
 
 def _first_telemetry_item(device: dict) -> dict:
-    """Return the first telemetry-like item from a device payload."""
+    """Return the first telemetry-like item from the device payload."""
     for key in TELEMETRY_KEYS:
         telemetry = device.get(key)
         if isinstance(telemetry, list) and telemetry:
@@ -134,7 +216,6 @@ def _rounded_device_value(device: dict, key: str, digits: int = 1):
         return round(float(value), digits)
     except (TypeError, ValueError):
         return None
-
 
 
 
@@ -361,6 +442,7 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                 device,
                 BREWZILLA_EXTERNAL_TEMP_CANDIDATE_KEYS,
             )
+            profile_runtime = _debug_profile_runtime_snapshot(device)
 
             devices.append(
                 {
@@ -385,6 +467,7 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                     "heating_utilisation": _debug_get_value(device, "heatingUtilisation"),
                     "pump_utilisation": _debug_get_value(device, "pumpUtilisation"),
                     "external_temperature_candidates": external_candidates,
+                    "profile_runtime": profile_runtime,
                     "payload_keys": sorted(device.keys()),
                     "telemetry_keys": sorted(telemetry.keys()) if telemetry else [],
                 }
@@ -830,4 +913,3 @@ class BondedDeviceConnectionStateSensor(BaseRaptSensor):
     def extra_state_attributes(self):
         device = self.coordinator.data.get(self._device_id, {})
         return _bonded_device_attributes(device)
-

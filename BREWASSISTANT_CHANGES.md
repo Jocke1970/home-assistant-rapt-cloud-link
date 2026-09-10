@@ -21,14 +21,13 @@ rebased into the BrewAssistant branch and verified there.
 
 ## Current branch delta
 
-As of 2026-09-02, the BrewAssistant branch is five commits ahead of
-`main` and changes one source file:
+As of 2026-09-10, the BrewAssistant branch carries the original five
+BrewAssistant functional commits plus later maintenance and discovery work.
+The BrewAssistant source changes remain concentrated in:
 
 - `custom_components/rapt_cloud_link/sensor.py`
-- 485 additions and 6 deletions compared with `main`
-- comparison base: `30907e957d7c5d1cdbe268b9ed3fdf81c7f4b82a`
 
-The five BrewAssistant commits, oldest first, are:
+The original five BrewAssistant commits, oldest first, are:
 
 1. [`25db2b0`](https://github.com/Jocke1970/home-assistant-rapt-cloud-link/commit/25db2b01b446b03f47c876a121cba5d11fd22f88)
    — Add BrewAssistant metadata for bonded BLE temperatures
@@ -114,6 +113,7 @@ Attributes expose the payload structure and useful values including:
 - heating, pump and utilization values
 - root and telemetry payload keys
 - additional possible external-temperature fields
+- bounded active-profile/session discovery metadata under `profile_runtime`
 
 This sensor is intended for troubleshooting changes in the RAPT Cloud
 payload without dumping the complete raw payload into Home Assistant state.
@@ -175,6 +175,34 @@ Diagnostic attributes include:
 - `ba_value_rejected`
 - `ba_reject_reason: control_device_temperature_zero_or_invalid`
 
+### 8. Active BrewZilla profile/session discovery
+
+A live BrewZilla test on 2026-09-10 established an important distinction:
+
+- merely downloading a RAPT brewing profile to the BrewZilla did not add
+  profile-related fields to the `GetBrewZillas` payload;
+- once the profile was started on the BrewZilla, the root payload exposed
+  `activeProfileId`, `activeProfileStepId` and `activeProfileSession`;
+- active telemetry exposed `profileId` and `profileStepId`.
+
+The BrewZilla debug sensor therefore includes a bounded `profile_runtime`
+snapshot intended to discover the exact runtime contract without exposing
+the complete raw profile/session object.
+
+The snapshot includes, where available:
+
+- root `active_profile_id` and `active_profile_step_id`;
+- telemetry profile/session identifiers and progress candidates;
+- `activeProfileSession` keys and selected timing fields;
+- nested profile ID/name/keys when the session embeds a profile object;
+- profile step count and the union of available step keys;
+- a maximum 20-step preview containing only process-relevant fields such as
+  target temperature, control/end/duration types, pump settings, heating
+  utilisation, PID state and sensor differential.
+
+This is discovery instrumentation only. It does not yet make a RAPT profile
+the BrewAssistant process source and it does not change BrewZilla control.
+
 ## BrewAssistant usage intent
 
 The added metadata distinguishes the two hot-side temperature roles:
@@ -190,6 +218,12 @@ During Chill and Transfer the Cooling/CFC backend may use the same physical
 BLE thermometer as the CFC wort-out temperature. BrewZilla's internal
 temperature remains available throughout the brew day.
 
+For active RAPT brewing profiles, the working architecture is that the
+BrewZilla remains the local profile executor while BrewAssistant observes
+and supervises the active profile/session through RAPT Cloud Link. The exact
+runtime mapping will be implemented in BrewAssistant only after the live
+payload contract has been verified.
+
 That lifecycle is implemented in BrewAssistant. This fork only makes the
 RAPT data and source metadata available to Home Assistant.
 
@@ -203,6 +237,10 @@ RAPT data and source metadata available to Home Assistant.
   process temperature.
 - The two dedicated external-temperature sensors currently mirror the same
   selected payload value.
+- Profile/session discovery currently relies on fields present in the
+  `GetBrewZillas` response while a local BrewZilla profile is active.
+- The `profile_runtime` step preview is capped at 20 steps and intentionally
+  excludes unknown/raw nested content.
 - The debug sensors can expose device identifiers, MAC addresses and payload
   structure in Home Assistant state attributes. Treat exported diagnostics
   accordingly.
@@ -226,7 +264,10 @@ RAPT data and source metadata available to Home Assistant.
    - BrewZilla internal-temperature metadata is present;
    - control-device and logical BLE temperatures select telemetry first;
    - zero/invalid control-device values become unavailable and carry the
-     rejection diagnostics.
+     rejection diagnostics;
+   - `profile_runtime` stays structurally safe when no profile is active;
+   - when a BrewZilla profile is active, the profile/session discovery fields
+     reflect the root and telemetry payload.
 8. Commit the synchronization and any documentation update to the
    BrewAssistant branch.
 
