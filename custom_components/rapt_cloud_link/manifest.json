@@ -4,10 +4,10 @@
   "codeowners": ["@berra200"],
   "config_flow": true,
   "dependencies": ["http"],
-  "documentation": "https://github.com/berra200/home-assistant-rapt-cloud-link",
+  "documentation": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/tree/ba/brewassistant-rapt-cloud-link",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/berra200/home-assistant-rapt-cloud-link/issues",
+  "issue_tracker": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/issues",
   "requirements": ["aiohttp"],
-  "version": "0.5.0"
+  "version": "0.5.0-beta.1"
 }
