@@ -1,9 +1,10 @@
+"""BrewZilla cloud coordinator; never infer STOP from a failed poll."""
+
 from datetime import timedelta
 
 from .base_coordinator import BaseRaptCoordinator
 from ..api.brewzilla_api import BrewZillaAPI
 from homeassistant.helpers.update_coordinator import UpdateFailed
-
 
 ACTIVE_PROFILE_POLL_INTERVAL = timedelta(seconds=60)
 
@@ -16,35 +17,76 @@ def _has_active_profile(devices):
         if not isinstance(device, dict):
             continue
         session = device.get("activeProfileSession")
-        if (
-            isinstance(session, dict)
-            and session
-            and (device.get("activeProfileId") or session.get("profileId"))
-        ):
+        if isinstance(session, dict) and session and (device.get("activeProfileId") or session.get("profileId")):
             return True
     return False
+
+
+def _clean_profile_stop(device):
+    """Only a connected BrewZilla with ALL profile markers absent can count."""
+    if str(device.get("connectionState") or "").casefold() != "connected":
+        return False
+    if any(device.get(key) for key in ("activeProfileId", "activeProfileStepId", "activeProfileSession")):
+        return False
+    telemetry = device.get("telemetry")
+    if isinstance(telemetry, dict):
+        if telemetry.get("profileId") or telemetry.get("profileStepId"):
+            return False
+    elif isinstance(telemetry, list):
+        if any(isinstance(row, dict) and (row.get("profileId") or row.get("profileStepId")) for row in telemetry):
+            return False
+    return True
 
 
 class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
     def __init__(self, hass, token_manager, update_interval, entry):
         super().__init__(hass, token_manager, update_interval, entry, name="BrewZilla API")
         self._idle_update_interval = update_interval
+        # These are *observations*, never commands. A restart has no STOP proof.
+        self._last_active_session = {}
+        self._clean_stop_polls = {}
+
+    def _annotate_profile_handoff(self, devices):
+        for device in devices:
+            if not isinstance(device, dict) or not device.get("id"):
+                continue
+            key = device["id"]
+            session = device.get("activeProfileSession")
+            active = bool(isinstance(session, dict) and session and
+                          (device.get("activeProfileId") or session.get("profileId")))
+            device["_baProfileStopConfirmed"] = False
+            device["_baStoppedSessionId"] = None
+            if active:
+                session_id = session.get("id")
+                # Do not attest STOP for a session with no concrete identity.
+                if session_id:
+                    self._last_active_session[key] = session_id
+                self._clean_stop_polls[key] = 0
+                continue
+            if key not in self._last_active_session or not _clean_profile_stop(device):
+                self._clean_stop_polls[key] = 0
+                continue
+            count = self._clean_stop_polls.get(key, 0) + 1
+            self._clean_stop_polls[key] = count
+            if count >= 2:
+                device["_baProfileStopConfirmed"] = True
+                device["_baStoppedSessionId"] = self._last_active_session[key]
 
     async def _async_update_data(self):
         try:
             api = await self._get_token_and_api(BrewZillaAPI)
             devices = await api.get_brewzillas()
-            # BA rejects RAPT telemetry older than 90 seconds. Poll only the
-            # BrewZilla coordinator at <=60s while a profile is running;
-            # restore the configured interval when its session disappears.
-            # A failed poll leaves the previous cadence in place. BA's age
-            # gate remains authoritative if the cloud does not respond.
+            if not isinstance(devices, list):
+                raise ValueError("BrewZilla API payload is not a device list")
+            # A failed poll never changes the STOP counters or sends commands.
+            self._annotate_profile_handoff(devices)
+            # Only BrewZilla polls faster during an active session; Pill and
+            # other coordinators retain their configured intervals.
             self.update_interval = (
                 min(self._idle_update_interval, ACTIVE_PROFILE_POLL_INTERVAL)
-                if _has_active_profile(devices)
-                else self._idle_update_interval
+                if _has_active_profile(devices) else self._idle_update_interval
             )
-            return {device["id"]: device for device in devices if "id" in device}
+            return {device["id"]: device for device in devices if isinstance(device, dict) and "id" in device}
         except Exception as err:
             raise UpdateFailed(f"Failed to fetch BrewZilla data: {err}") from err
 
