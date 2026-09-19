@@ -58,9 +58,12 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             device["_baStoppedSessionId"] = None
             if active:
                 session_id = session.get("id")
-                # Do not attest STOP for a session with no concrete identity.
+                # A new anonymous active session must invalidate earlier STOP
+                # identity. It is unsafe to attest STOP for the *old* run.
                 if session_id:
                     self._last_active_session[key] = session_id
+                else:
+                    self._last_active_session.pop(key, None)
                 self._clean_stop_polls[key] = 0
                 continue
             if key not in self._last_active_session or not _clean_profile_stop(device):
