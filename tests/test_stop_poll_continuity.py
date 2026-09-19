@@ -63,6 +63,21 @@ class StopPollContinuityTest(unittest.IsolatedAsyncioTestCase):
         coordinator.api.devices = [inactive()]
         self.assertFalse((await logic["_async_update_data"](coordinator))["bz"]["_baProfileStopConfirmed"])
 
+    async def test_duplicate_device_rows_cannot_count_as_separate_polls(self):
+        logic = coordinator_logic()
+        coordinator = StubCoordinator(logic, [active()])
+        await logic["_async_update_data"](coordinator)
+
+        coordinator.api.devices = [inactive(), inactive()]
+        with self.assertRaises(RuntimeError):
+            await logic["_async_update_data"](coordinator)
+        self.assertEqual(coordinator._last_active_session["bz"], "run")
+        self.assertEqual(coordinator._clean_stop_polls["bz"], 0)
+
+        coordinator.api.devices = [inactive()]
+        self.assertFalse((await logic["_async_update_data"](coordinator))["bz"]["_baProfileStopConfirmed"])
+        self.assertTrue((await logic["_async_update_data"](coordinator))["bz"]["_baProfileStopConfirmed"])
+
 
 if __name__ == "__main__":
     unittest.main()
