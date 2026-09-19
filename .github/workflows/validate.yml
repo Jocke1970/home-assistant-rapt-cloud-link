@@ -4,12 +4,29 @@ on:
   push:
     branches:
       - main
+      - ba/brewassistant-rapt-cloud-link
+      - 'release/**'
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
+      - ba/brewassistant-rapt-cloud-link
   workflow_dispatch:
 
 jobs:
+  python-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile integration
+        run: python -m compileall -q custom_components/rapt_cloud_link
+      - name: Check version and profile contract
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
   validate-hassfest:
     runs-on: ubuntu-latest
     steps:
