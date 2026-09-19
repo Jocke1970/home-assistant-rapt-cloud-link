@@ -1,11 +1,13 @@
 """BrewZilla cloud coordinator; never infer STOP from a failed poll."""
 
+import logging
 from datetime import timedelta
 
 from .base_coordinator import BaseRaptCoordinator
 from ..api.brewzilla_api import BrewZillaAPI
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+_LOGGER = logging.getLogger(__name__)
 ACTIVE_PROFILE_POLL_INTERVAL = timedelta(seconds=60)
 
 
@@ -116,16 +118,36 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
                 self._clean_stop_polls[key] = 0
             raise UpdateFailed(f"Failed to fetch BrewZilla data: {err}") from err
 
+    async def _refresh_profile_status_after_command(self, operation: str):
+        """Best-effort readback, independent of an already returned command result."""
+        try:
+            await self.async_request_refresh()
+        except Exception:
+            # The command may already have been accepted. A read failure is NOT
+            # command failure and must never trigger an automatic retry or STOP.
+            _LOGGER.warning(
+                "BrewZilla %s command returned; subsequent status refresh failed",
+                operation,
+                exc_info=True,
+            )
+
+    def _schedule_profile_status_refresh(self, operation: str):
+        """Schedule observation without blocking the command response."""
+        self.hass.async_create_task(
+            self._refresh_profile_status_after_command(operation),
+            f"rapt_cloud_link_{operation}_status_refresh",
+        )
+
     async def async_start_profile_session(self, device_id: str, profile_id: str, name: str):
-        """Start a RAPT profile on a BrewZilla and refresh live state."""
+        """Send start once; return its API response without waiting for readback."""
         api = await self._get_token_and_api(BrewZillaAPI)
         result = await api.start_profile_session(device_id, profile_id, name)
-        await self.async_request_refresh()
+        self._schedule_profile_status_refresh("start_profile")
         return result
 
     async def async_end_profile_session(self, device_id: str):
-        """End the active RAPT profile on a BrewZilla and refresh live state."""
+        """Send end once; return its API response without waiting for readback."""
         api = await self._get_token_and_api(BrewZillaAPI)
         result = await api.end_profile_session(device_id)
-        await self.async_request_refresh()
+        self._schedule_profile_status_refresh("end_profile")
         return result
