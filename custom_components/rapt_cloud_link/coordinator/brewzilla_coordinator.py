@@ -88,6 +88,12 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             devices = await api.get_brewzillas()
             if not isinstance(devices, list):
                 raise ValueError("BrewZilla API payload is not a device list")
+            # Duplicate IDs in one response are NOT separate observations.
+            # Reject the entire ambiguous snapshot before advancing STOP proof.
+            device_ids = [device["id"] for device in devices
+                          if isinstance(device, dict) and device.get("id")]
+            if len(device_ids) != len(set(device_ids)):
+                raise ValueError("BrewZilla API payload contains duplicate device IDs")
             self._annotate_profile_handoff(devices)
             awaiting_stop = any(
                 isinstance(device, dict)
