@@ -132,11 +132,25 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             )
 
     def _schedule_profile_status_refresh(self, operation: str):
-        """Schedule observation without blocking the command response."""
-        self.hass.async_create_task(
-            self._refresh_profile_status_after_command(operation),
-            f"rapt_cloud_link_{operation}_status_refresh",
-        )
+        """Schedule best-effort readback; never overwrite the API command result."""
+        refresh = self._refresh_profile_status_after_command(operation)
+        try:
+            self.hass.async_create_task(
+                refresh,
+                f"rapt_cloud_link_{operation}_status_refresh",
+            )
+        except Exception:
+            # Scheduling is readback infrastructure, not part of command success.
+            # Close a coroutine that could not be scheduled to avoid a warning.
+            try:
+                refresh.close()
+            except RuntimeError:
+                pass  # It may already have started before the scheduler failed.
+            _LOGGER.warning(
+                "BrewZilla %s command returned; status refresh could not be scheduled",
+                operation,
+                exc_info=True,
+            )
 
     async def async_start_profile_session(self, device_id: str, profile_id: str, name: str):
         """Send start once; return its API response without waiting for readback."""
