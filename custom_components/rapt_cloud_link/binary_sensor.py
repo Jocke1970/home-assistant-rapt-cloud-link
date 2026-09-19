@@ -143,6 +143,11 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "raw_device_id": self._device_id,
             "profile_active": bool(context.get("active")),
             "profile_contract_complete": bool(context.get("contract_complete")),
+            # STOP is not the inverse of active. Only two consecutive clean,
+            # connected API polls after THIS session attest its disappearance.
+            # No output-control command is issued by this diagnostic contract.
+            "profile_stop_confirmed": device.get("_baProfileStopConfirmed") is True,
+            "profile_stopped_session_id": device.get("_baStoppedSessionId"),
             "profile_id": context.get("profile_id"),
             "profile_name": context.get("profile_name"),
             "profile_session_id": context.get("profile_session_id"),
@@ -154,7 +159,7 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "step_order": context.get("step_order"),
             "step_target_temperature": context.get("step_target_temperature"),
             "step_control_type": context.get("step_control_type"),
-            "step_end_type": context.get("step_end_type"),
+            "step_end_type": context.get("end_type"),
             "step_duration_type": context.get("step_duration_type"),
             "step_length": context.get("step_length"),
             "step_pid_enabled": context.get("step_pid_enabled"),
