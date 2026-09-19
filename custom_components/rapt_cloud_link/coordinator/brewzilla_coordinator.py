@@ -47,10 +47,12 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
         self._clean_stop_polls = {}
 
     def _annotate_profile_handoff(self, devices):
+        observed = set()
         for device in devices:
             if not isinstance(device, dict) or not device.get("id"):
                 continue
             key = device["id"]
+            observed.add(key)
             session = device.get("activeProfileSession")
             active = bool(isinstance(session, dict) and session and
                           (device.get("activeProfileId") or session.get("profileId")))
@@ -75,13 +77,17 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
                 device["_baProfileStopConfirmed"] = True
                 device["_baStoppedSessionId"] = self._last_active_session[key]
 
+        # A successful response omitting a previously observed device interrupts
+        # its STOP proof, even if the next response reports it as connected.
+        for key in self._last_active_session.keys() - observed:
+            self._clean_stop_polls[key] = 0
+
     async def _async_update_data(self):
         try:
             api = await self._get_token_and_api(BrewZillaAPI)
             devices = await api.get_brewzillas()
             if not isinstance(devices, list):
                 raise ValueError("BrewZilla API payload is not a device list")
-            # A failed poll never changes the STOP counters or sends commands.
             self._annotate_profile_handoff(devices)
             awaiting_stop = any(
                 isinstance(device, dict)
@@ -97,6 +103,11 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             )
             return {device["id"]: device for device in devices if isinstance(device, dict) and "id" in device}
         except Exception as err:
+            # Two STOP observations must be consecutive successful polls.
+            # Preserve the last live session identity, but discard partial proof
+            # after a timeout, malformed payload or other failed update.
+            for key in self._last_active_session:
+                self._clean_stop_polls[key] = 0
             raise UpdateFailed(f"Failed to fetch BrewZilla data: {err}") from err
 
     async def async_start_profile_session(self, device_id: str, profile_id: str, name: str):
