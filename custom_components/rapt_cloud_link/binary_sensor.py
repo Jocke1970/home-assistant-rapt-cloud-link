@@ -38,11 +38,18 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
     if current_index is not None and current_index + 1 < len(steps):
         next_step = steps[current_index + 1]
 
-    # Treat the profile as active while the profile id and concrete session are
-    # present. Do not key activity only on activeProfileStepId; a transient step
-    # handoff must never look like a confirmed STOP to BrewAssistant.
+    # Keep RAPT ownership while a concrete session remains present. A transient
+    # step handoff must not masquerade as a confirmed STOP. A separate, stricter
+    # contract guards BA's positive writes: valid session identity, a step that
+    # belongs to this profile, and an explicit target are all required.
     active = bool(profile_id and session)
-    contract_complete = bool(active and step_id)
+    contract_complete = bool(
+        active
+        and session.get("id")
+        and step_id
+        and current_step
+        and current_step.get("temperature") is not None
+    )
 
     compact_steps = []
     for index, step in enumerate(steps[:MAX_PROFILE_STEPS]):
