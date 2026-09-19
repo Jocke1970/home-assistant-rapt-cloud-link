@@ -15,17 +15,13 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
     session = device.get("activeProfileSession")
     if not isinstance(session, dict):
         session = {}
-
     profile = session.get("profile")
     if not isinstance(profile, dict):
         profile = {}
-
     raw_steps = profile.get("steps")
     steps = [step for step in raw_steps if isinstance(step, dict)] if isinstance(raw_steps, list) else []
-
     profile_id = device.get("activeProfileId") or session.get("profileId") or profile.get("id")
     step_id = device.get("activeProfileStepId")
-
     current_step: dict[str, Any] = {}
     current_index: int | None = None
     for index, step in enumerate(steps):
@@ -33,47 +29,35 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
             current_step = step
             current_index = index
             break
-
     next_step: dict[str, Any] = {}
     if current_index is not None and current_index + 1 < len(steps):
         next_step = steps[current_index + 1]
 
-    # Keep RAPT ownership while a concrete session remains present. A transient
-    # step handoff must not masquerade as a confirmed STOP. A separate, stricter
-    # contract guards BA's positive writes: valid session identity, a step that
-    # belongs to this profile, and an explicit target are all required.
+    # A transient step handoff keeps RAPT ownership, but missing session ID,
+    # step identity or target cannot authorize BA positive commands.
     active = bool(profile_id and session)
     contract_complete = bool(
-        active
-        and session.get("id")
-        and step_id
-        and current_step
+        active and session.get("id") and step_id and current_step
         and current_step.get("temperature") is not None
     )
-
     compact_steps = []
     for index, step in enumerate(steps[:MAX_PROFILE_STEPS]):
         order = step.get("order")
         step_number = int(order) + 1 if isinstance(order, int) else index + 1
-        compact_steps.append(
-            {
-                "step_number": step_number,
-                "id": step.get("id"),
-                "name": step.get("name"),
-                "order": order,
-                "control_type": step.get("controlType"),
-                "end_type": step.get("endType"),
-                "duration_type": step.get("durationType"),
-                "length": step.get("length"),
-                "target_temperature": step.get("temperature"),
-                "pump_enabled": step.get("pumpEnabled"),
-                "pump_utilisation": step.get("pumpUtilisation"),
-                "heating_utilisation": step.get("heatingUtilisation"),
-                "pid_enabled": step.get("pidEnabled"),
-                "sensor_differential": step.get("sensorDifferential"),
-            }
-        )
-
+        compact_steps.append({
+            "step_number": step_number, "id": step.get("id"),
+            "name": step.get("name"), "order": order,
+            "control_type": step.get("controlType"),
+            "end_type": step.get("endType"),
+            "duration_type": step.get("durationType"),
+            "length": step.get("length"),
+            "target_temperature": step.get("temperature"),
+            "pump_enabled": step.get("pumpEnabled"),
+            "pump_utilisation": step.get("pumpUtilisation"),
+            "heating_utilisation": step.get("heatingUtilisation"),
+            "pid_enabled": step.get("pidEnabled"),
+            "sensor_differential": step.get("sensorDifferential"),
+        })
     current_order = current_step.get("order")
     if isinstance(current_order, int):
         current_step_number = current_order + 1
@@ -81,7 +65,6 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
         current_step_number = current_index + 1
     else:
         current_step_number = None
-
     return {
         "active": active,
         "contract_complete": contract_complete,
@@ -110,17 +93,15 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    brewzilla_coordinator = hass.data[DOMAIN][entry.entry_id]["brewzilla_coordinator"]
-    entities = [
-        BrewZillaProfileActiveBinarySensor(brewzilla_coordinator, device_id)
-        for device_id in brewzilla_coordinator.data
-    ]
+    coordinator = hass.data[DOMAIN][entry.entry_id]["brewzilla_coordinator"]
+    entities = [BrewZillaProfileActiveBinarySensor(coordinator, device_id)
+                for device_id in coordinator.data]
     if entities:
         async_add_entities(entities, update_before_add=True)
 
 
 class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
-    """Expose the active local BrewZilla profile as a stable BA contract."""
+    """Expose active-profile and separately attested STOP state to BA."""
 
     _attr_icon = "mdi:playlist-play"
 
@@ -143,9 +124,8 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "raw_device_id": self._device_id,
             "profile_active": bool(context.get("active")),
             "profile_contract_complete": bool(context.get("contract_complete")),
-            # STOP is not the inverse of active. Only two consecutive clean,
-            # connected API polls after THIS session attest its disappearance.
-            # No output-control command is issued by this diagnostic contract.
+            # STOP is NOT the inverse of active: two clean connected API polls
+            # after the same known session are needed. No commands issued here.
             "profile_stop_confirmed": device.get("_baProfileStopConfirmed") is True,
             "profile_stopped_session_id": device.get("_baStoppedSessionId"),
             "profile_id": context.get("profile_id"),
@@ -159,7 +139,7 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "step_order": context.get("step_order"),
             "step_target_temperature": context.get("step_target_temperature"),
             "step_control_type": context.get("step_control_type"),
-            "step_end_type": context.get("end_type"),
+            "step_end_type": context.get("step_end_type"),
             "step_duration_type": context.get("step_duration_type"),
             "step_length": context.get("step_length"),
             "step_pid_enabled": context.get("step_pid_enabled"),
