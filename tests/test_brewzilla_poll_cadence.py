@@ -111,6 +111,19 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator._clean_stop_polls.get("bz"), 0)
         self.assertEqual(coordinator.update_interval, timedelta(seconds=60))
 
+    async def test_anonymous_new_session_cannot_attest_old_run_stop(self):
+        logic = coordinator_logic()
+        coordinator = StubCoordinator(logic, [active()])
+        await logic["_async_update_data"](coordinator)
+        coordinator.api.devices = [{**active(), "activeProfileSession": {"profileId": "p-new"},
+                                    "activeProfileId": "p-new"}]
+        await logic["_async_update_data"](coordinator)
+        self.assertNotIn("bz", coordinator._last_active_session)
+        for _ in range(3):
+            coordinator.api.devices = [inactive()]
+            result = await logic["_async_update_data"](coordinator)
+            self.assertFalse(result["bz"]["_baProfileStopConfirmed"])
+
     async def test_cold_start_off_never_attests_previous_run(self):
         logic = coordinator_logic()
         coordinator = StubCoordinator(logic, [inactive()])
