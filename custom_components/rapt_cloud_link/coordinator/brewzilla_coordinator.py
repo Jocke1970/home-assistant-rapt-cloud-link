@@ -80,11 +80,17 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
                 raise ValueError("BrewZilla API payload is not a device list")
             # A failed poll never changes the STOP counters or sends commands.
             self._annotate_profile_handoff(devices)
-            # Only BrewZilla polls faster during an active session; Pill and
-            # other coordinators retain their configured intervals.
+            awaiting_stop = any(
+                isinstance(device, dict)
+                and device.get("id") in self._last_active_session
+                and not device.get("_baProfileStopConfirmed")
+                for device in devices
+            )
+            # Only BrewZilla polls faster during an active or unverified session;
+            # Pill and other coordinators keep their configured intervals.
             self.update_interval = (
                 min(self._idle_update_interval, ACTIVE_PROFILE_POLL_INTERVAL)
-                if _has_active_profile(devices) else self._idle_update_interval
+                if _has_active_profile(devices) or awaiting_stop else self._idle_update_interval
             )
             return {device["id"]: device for device in devices if isinstance(device, dict) and "id" in device}
         except Exception as err:
