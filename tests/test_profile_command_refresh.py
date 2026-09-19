@@ -127,6 +127,31 @@ class ProfileCommandRefreshTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coordinator.refresh_calls, 1)
         self.assertEqual(coordinator.api.calls, [("end", "brewzilla-1")])
 
+    async def test_scheduler_failure_cannot_mask_start_or_end_result(self):
+        methods = command_methods()
+        for operation in ("start", "end"):
+            with self.subTest(operation=operation):
+                coordinator = FakeCoordinator(methods)
+
+                def unavailable_scheduler(_coroutine, _name):
+                    raise RuntimeError("HA task scheduler unavailable")
+
+                coordinator.hass.async_create_task = unavailable_scheduler
+                with self.assertLogs(level="WARNING") as logs:
+                    if operation == "start":
+                        result = await methods["async_start_profile_session"](
+                            coordinator, "brewzilla-1", "profile-1", "Test"
+                        )
+                    else:
+                        result = await methods["async_end_profile_session"](
+                            coordinator, "brewzilla-1"
+                        )
+                self.assertEqual(result, {"accepted": operation})
+                self.assertEqual(len(coordinator.api.calls), 1)
+                self.assertEqual(coordinator.hass.pending, [])
+                self.assertEqual(coordinator.refresh_calls, 0)
+                self.assertIn("could not be scheduled", " ".join(logs.output))
+
 
 if __name__ == "__main__":
     unittest.main()
