@@ -4,14 +4,14 @@ on:
   push:
     branches:
       - main
-      - ba/brewassistant-rapt-cloud-link
+      - brewassistant-raptcloudlink
       - 'release/**'
     tags:
       - 'v*'
   pull_request:
     branches:
       - main
-      - ba/brewassistant-rapt-cloud-link
+      - brewassistant-raptcloudlink
   workflow_dispatch:
 
 jobs:
