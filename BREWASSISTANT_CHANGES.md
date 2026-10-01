@@ -1,7 +1,7 @@
 # BrewAssistant-specific changes
 
 This document describes the custom changes carried by the
-`ba/brewassistant-rapt-cloud-link` branch of
+`brewassistant-raptcloudlink` branch of
 [`Jocke1970/home-assistant-rapt-cloud-link`](https://github.com/Jocke1970/home-assistant-rapt-cloud-link).
 
 It exists so the BrewAssistant additions can be identified, tested and
@@ -12,10 +12,10 @@ reapplied when the fork is synchronized with upstream.
 - Fork: `Jocke1970/home-assistant-rapt-cloud-link`
 - Upstream: `berra200/home-assistant-rapt-cloud-link`
 - Upstream-tracking branch in the fork: `main`
-- BrewAssistant branch: `ba/brewassistant-rapt-cloud-link`
+- BrewAssistant branch: `brewassistant-raptcloudlink`
 - Home Assistant integration domain remains `rapt_cloud_link`
 
-The BrewAssistant changes should stay isolated on the `ba/...` branch.
+The BrewAssistant changes should stay isolated on the `brewassistant-*` branch.
 Upstream updates should first be brought into `main`, then merged or
 rebased into the BrewAssistant branch and verified there.
 
@@ -300,10 +300,10 @@ fork provides the RAPT data and command surface.
 1. Fetch `berra200/home-assistant-rapt-cloud-link`.
 2. Update the fork's `main` from upstream `main`.
 3. Merge or rebase the updated `main` into
-   `ba/brewassistant-rapt-cloud-link`.
+   `brewassistant-raptcloudlink`.
 4. Review conflicts in every BrewAssistant-modified source file listed in
    the current branch delta above.
-5. Compare `main...ba/brewassistant-rapt-cloud-link` and update this
+5. Compare `main...brewassistant-raptcloudlink` and update this
    document if the branch delta changed.
 6. Validate Python syntax and Home Assistant integration setup.
 7. In Home Assistant, verify:
@@ -325,5 +325,5 @@ fork provides the RAPT data and command surface.
 ## Maintenance rule
 
 Any future BrewAssistant-specific modification to this integration should be
-committed to `ba/brewassistant-rapt-cloud-link` and documented here in the
+committed to `brewassistant-raptcloudlink` and documented here in the
 same change.
