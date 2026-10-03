@@ -101,7 +101,7 @@ class ProfileContractTest(unittest.TestCase):
     def test_prerelease_version(self):
         manifest = json.loads((PKG / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["domain"], "rapt_cloud_link")
-        self.assertEqual(manifest["version"], "0.5.0-beta.1")
+        self.assertEqual(manifest["version"], "2026.10.0b1")
         self.assertTrue((PKG / "services.yaml").exists())
 
 
