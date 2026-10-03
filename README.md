@@ -26,6 +26,9 @@ The BrewAssistant-specific adaptations are maintained by
 ## Features
 
 - Cloud polling for real-time updates from your devices.
+- BrewAssistant branch: BrewZilla telemetry is polled at least every 30 seconds
+  (or faster when the configured operator interval is already shorter), while
+  Pill and other RAPT coordinators keep their configured cadence.
 - Supports multiple device types including:
   - BrewZilla (temperature, heating, pump, etc.)
   - RAPT Pill (gravity, temperature, battery)
@@ -93,6 +96,9 @@ that the hardware outputs are physically safe.
 ## Tips & Notes
 
 - The integration polls your devices periodically to provide real-time updates.
+- The BrewZilla 30-second cadence cannot force RAPT Cloud itself to publish a
+  new BLE/control-device temperature every 30 seconds; repeated cloud values
+  will remain repeated in Home Assistant.
 - Make sure your API key has the correct permissions in RAPT Cloud.
 - Feedback and contributions are welcome via GitHub issues and pull requests.
 
