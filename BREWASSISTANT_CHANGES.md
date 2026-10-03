@@ -279,6 +279,18 @@ telemetry, the BrewZilla debug sensor now exposes:
 These values are diagnostic only. They do not change sensor selection or
 BrewAssistant control behavior.
 
+### 12. Telemetry age sensors
+
+The integration now creates two dedicated BrewZilla freshness entities:
+
+- `BrewZilla Telemetry Age`: seconds since the latest telemetry `createdOn`;
+- `RAPT BLE Thermometer BLE Data Age`: seconds since the telemetry record
+  carrying a valid `controlDeviceTemperature`.
+
+Both are measurement sensors intended for Recorder/history diagnostics. They
+do not alter BrewAssistant control or source selection. The BLE age sensor is
+unavailable when no valid cloud-side control-device temperature exists.
+
 ## BrewAssistant usage intent
 
 The added metadata distinguishes the two hot-side temperature roles:
