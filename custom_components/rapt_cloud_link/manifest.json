@@ -8,7 +8,7 @@
   "dependencies": [
     "http"
   ],
-  "documentation": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/tree/brewassistant-raptcloudlink",
+  "documentation": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/tree/dev",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/issues",
