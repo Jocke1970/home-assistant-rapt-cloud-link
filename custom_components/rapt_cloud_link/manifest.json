@@ -12,5 +12,5 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Jocke1970/home-assistant-rapt-cloud-link/issues",
-  "version": "2026.10.0b2"
+  "version": "2026.10.0b3"
 }
