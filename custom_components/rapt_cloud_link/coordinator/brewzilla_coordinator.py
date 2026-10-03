@@ -8,6 +8,7 @@ from ..api.brewzilla_api import BrewZillaAPI
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 _LOGGER = logging.getLogger(__name__)
+BREWZILLA_IDLE_POLL_INTERVAL = timedelta(seconds=30)
 ACTIVE_PROFILE_POLL_INTERVAL = timedelta(seconds=60)
 
 
@@ -43,7 +44,11 @@ def _clean_profile_stop(device):
 class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
     def __init__(self, hass, token_manager, update_interval, entry):
         super().__init__(hass, token_manager, update_interval, entry, name="BrewZilla API")
-        self._idle_update_interval = update_interval
+        # BrewZilla carries the control-device/BLE thermometer telemetry used
+        # by BrewAssistant. Keep this coordinator responsive even when no RAPT
+        # profile is active, without changing Pill/other coordinator cadence.
+        self._idle_update_interval = min(update_interval, BREWZILLA_IDLE_POLL_INTERVAL)
+        self.update_interval = self._idle_update_interval
         # These are *observations*, never commands. A restart has no STOP proof.
         self._last_active_session = {}
         self._clean_stop_polls = {}
