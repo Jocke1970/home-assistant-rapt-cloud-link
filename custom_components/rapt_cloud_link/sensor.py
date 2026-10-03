@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.sensor import (
@@ -80,6 +81,21 @@ def _debug_telemetry_freshness_snapshot(device: dict) -> dict:
         "root_created_on": device.get("createdOn"),
         "telemetry_created_on": telemetry.get("createdOn") if telemetry else None,
     }
+
+
+def _age_seconds(timestamp_value, now: datetime | None = None):
+    """Return non-negative age in seconds for an ISO timestamp, or None."""
+    if timestamp_value in (None, ""):
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(timestamp_value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    current = now or datetime.now(timezone.utc)
+    age = (current - parsed.astimezone(timezone.utc)).total_seconds()
+    return round(max(age, 0.0), 1)
 
 
 def _debug_profile_runtime_snapshot(device: dict) -> dict:
@@ -353,6 +369,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         sensors.append(BrewZillaTemperatureSensor(brewzilla_coordinator, device_id))
         sensors.append(BrewZillaControlDeviceTemperatureSensor(brewzilla_coordinator, device_id))
         sensors.append(BrewZillaBleThermometerTemperatureSensor(brewzilla_coordinator, device_id))
+        sensors.append(BrewZillaTelemetryAgeSensor(brewzilla_coordinator, device_id))
+        sensors.append(BrewZillaBleDataAgeSensor(brewzilla_coordinator, device_id))
         sensors.append(BrewZillaConnectionStateSensor(brewzilla_coordinator, device_id))
 
     # Hydrometer
@@ -609,6 +627,80 @@ class BrewZillaBleThermometerTemperatureSensor(BaseRaptSensor):
             }
         )
         return attrs
+
+
+class BrewZillaTelemetryAgeSensor(BaseRaptSensor):
+    """Age of the latest BrewZilla cloud telemetry observation."""
+
+    def __init__(self, coordinator, device_id: str):
+        super().__init__(
+            coordinator,
+            device_id,
+            model="BrewZilla",
+            name_suffix="Telemetry Age",
+            unique_suffix="telemetry_age",
+            unit="s",
+        )
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:timer-outline"
+
+    @property
+    def native_value(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        telemetry = _first_telemetry_item(device)
+        return _age_seconds(telemetry.get("createdOn"))
+
+    @property
+    def extra_state_attributes(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        telemetry = _first_telemetry_item(device)
+        return {
+            "ba_source": "rapt_cloud_link_brewzilla_telemetry_age",
+            "raw_device_id": self._device_id,
+            "telemetry_created_on": telemetry.get("createdOn"),
+            "last_activity_time": device.get("lastActivityTime"),
+        }
+
+
+class BrewZillaBleDataAgeSensor(BaseRaptSensor):
+    """Age of the cloud observation carrying BrewZilla BLE/control-device temperature."""
+
+    def __init__(self, coordinator, device_id: str):
+        super().__init__(
+            coordinator,
+            device_id,
+            model="RAPT BLE Thermometer",
+            name_suffix="BLE Data Age",
+            unique_suffix="ble_data_age",
+            unit="s",
+        )
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:bluetooth-audio"
+
+    @property
+    def native_value(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        telemetry = _first_telemetry_item(device)
+        if not _valid_control_device_temperature(
+            telemetry.get("controlDeviceTemperature")
+        ):
+            return None
+        return _age_seconds(telemetry.get("createdOn"))
+
+    @property
+    def extra_state_attributes(self):
+        device = self.coordinator.data.get(self._device_id, {})
+        telemetry = _first_telemetry_item(device)
+        return {
+            "ba_source": "rapt_cloud_link_brewzilla_ble_data_age",
+            "raw_device_id": self._device_id,
+            "telemetry_created_on": telemetry.get("createdOn"),
+            "control_device_temperature": _numeric_payload_value(
+                telemetry.get("controlDeviceTemperature")
+            ),
+        }
 
 
 class BrewZillaConnectionStateSensor(BaseRaptSensor):
