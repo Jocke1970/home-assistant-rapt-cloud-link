@@ -70,6 +70,18 @@ def _debug_pick_values(device: dict, keys: tuple[str, ...]) -> dict:
     return values
 
 
+def _debug_telemetry_freshness_snapshot(device: dict) -> dict:
+    """Return timestamps/frequency that help diagnose stale BrewZilla telemetry."""
+    telemetry = _debug_first_telemetry_item(device)
+    return {
+        "telemetry_frequency": device.get("telemetryFrequency"),
+        "last_activity_time": device.get("lastActivityTime"),
+        "root_modified_on": device.get("modifiedOn"),
+        "root_created_on": device.get("createdOn"),
+        "telemetry_created_on": telemetry.get("createdOn") if telemetry else None,
+    }
+
+
 def _debug_profile_runtime_snapshot(device: dict) -> dict:
     """Return a bounded snapshot of BrewZilla active profile/session data."""
     telemetry = _debug_first_telemetry_item(device)
@@ -443,6 +455,7 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                 BREWZILLA_EXTERNAL_TEMP_CANDIDATE_KEYS,
             )
             profile_runtime = _debug_profile_runtime_snapshot(device)
+            telemetry_freshness = _debug_telemetry_freshness_snapshot(device)
 
             devices.append(
                 {
@@ -466,6 +479,7 @@ class BrewZillaDebugSensor(CoordinatorEntity, SensorEntity):
                     "pump_enabled": _debug_get_value(device, "pumpEnabled"),
                     "heating_utilisation": _debug_get_value(device, "heatingUtilisation"),
                     "pump_utilisation": _debug_get_value(device, "pumpUtilisation"),
+                    **telemetry_freshness,
                     "external_temperature_candidates": external_candidates,
                     "profile_runtime": profile_runtime,
                     "payload_keys": sorted(device.keys()),
