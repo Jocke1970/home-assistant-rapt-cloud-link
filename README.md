@@ -67,11 +67,11 @@ The BrewAssistant-specific adaptations are maintained by
    entry as appropriate **without deleting the existing HA integration entry
    or its credentials**. Back up first.
 4. Enable prereleases if your HACS version requires it, and explicitly install
-   tag `v2026.10.0b2` from this fork's published GitHub prerelease. Do not
+   tag `v2026.10.0b3` from this fork's published GitHub prerelease. Do not
    install untagged `dev`, `beta` or `main` branches
    for a physical test.
 5. Restart Home Assistant while the BrewZilla is inactive. Confirm the installed
-   `custom_components/rapt_cloud_link/manifest.json` says `2026.10.0b2`.
+   `custom_components/rapt_cloud_link/manifest.json` says `2026.10.0b3`.
 6. In Developer Tools → States, locate the RCL `Profile Active` binary sensor
    (search for the `ba_source` marker). When a RAPT profile is **already active**,
    confirm `profile_contract_complete`, `profile_session_id`, `step_id`,
@@ -83,6 +83,12 @@ The BrewAssistant-specific adaptations are maintained by
 The prerelease supports observation and validation first. A successful HACS
 installation, green CI or an accepted RCL cloud API request does **not** prove
 that the hardware outputs are physically safe.
+
+## Freshness diagnostics
+
+The BrewAssistant branch exposes dedicated `Telemetry Age` and `BLE Data Age`
+sensors in seconds. They make stale upstream RAPT/BrewZilla telemetry visible
+in Home Assistant history without changing control behavior.
 
 ## Configuration
 
