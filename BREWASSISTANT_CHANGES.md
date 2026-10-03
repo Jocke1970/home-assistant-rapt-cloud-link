@@ -261,6 +261,20 @@ This improves Home Assistant observation frequency but cannot force RAPT
 Cloud to publish fresher BLE telemetry. Repeated identical cloud payloads
 remain identical in Home Assistant.
 
+### 11. BrewZilla telemetry freshness diagnostics
+
+To distinguish Home Assistant polling delay from stale upstream RAPT/BrewZilla
+telemetry, the BrewZilla debug sensor now exposes:
+
+- `telemetry_frequency`
+- `last_activity_time`
+- `root_modified_on`
+- `root_created_on`
+- `telemetry_created_on`
+
+These values are diagnostic only. They do not change sensor selection or
+BrewAssistant control behavior.
+
 ## BrewAssistant usage intent
 
 The added metadata distinguishes the two hot-side temperature roles:
