@@ -245,6 +245,22 @@ The end response confirms that the cloud command was accepted, but
 BrewAssistant should treat disappearance of the `activeProfile*` fields in a
 fresh `GetBrewZillas` result as the authoritative STOP confirmation.
 
+### 10. BrewZilla telemetry polling cadence
+
+Coobra Sparge Water Heater testing on 2026-10-03 showed that the logical
+RAPT BLE thermometer could remain unchanged for several minutes while the
+physical water temperature was rising. The sensor reads BrewZilla's selected
+`controlDeviceTemperature`, but BrewZilla previously inherited the normal
+integration-wide poll interval whenever no RAPT profile was active.
+
+The BrewAssistant branch now clamps only the BrewZilla coordinator to a
+maximum idle poll interval of 30 seconds. Faster configured intervals are
+preserved; Pill and other RAPT coordinators keep their configured cadence.
+
+This improves Home Assistant observation frequency but cannot force RAPT
+Cloud to publish fresher BLE telemetry. Repeated identical cloud payloads
+remain identical in Home Assistant.
+
 ## BrewAssistant usage intent
 
 The added metadata distinguishes the two hot-side temperature roles:
