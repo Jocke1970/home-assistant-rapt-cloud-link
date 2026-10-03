@@ -1,7 +1,7 @@
 # BrewAssistant-specific changes
 
-This document describes the custom changes carried by the
-`brewassistant-raptcloudlink` branch of
+This document describes the BrewAssistant-specific changes carried through
+the `dev` → `beta` → `main` branch model of
 [`Jocke1970/home-assistant-rapt-cloud-link`](https://github.com/Jocke1970/home-assistant-rapt-cloud-link).
 
 It exists so the BrewAssistant additions can be identified, tested and
@@ -11,13 +11,17 @@ reapplied when the fork is synchronized with upstream.
 
 - Fork: `Jocke1970/home-assistant-rapt-cloud-link`
 - Upstream: `berra200/home-assistant-rapt-cloud-link`
-- Upstream-tracking branch in the fork: `main`
-- BrewAssistant branch: `brewassistant-raptcloudlink`
+- `dev`: active development
+- `beta`: validated prerelease candidate / latest prerelease line
+- `main`: stable release
+- Promotion order: `dev` → `beta` → `main`
 - Home Assistant integration domain remains `rapt_cloud_link`
 
-The BrewAssistant changes should stay isolated on the `brewassistant-*` branch.
-Upstream updates should first be brought into `main`, then merged or
-rebased into the BrewAssistant branch and verified there.
+Feature work belongs on `dev`. After validation it is promoted to `beta`;
+stable promotion is from `beta` to `main`. Temporary feature/fix branches
+may be used during development but should be deleted after merge. Release
+history is preserved by Git tags and GitHub Releases rather than permanent
+`release/...` branches.
 
 ## Current branch delta
 
@@ -328,12 +332,11 @@ fork provides the RAPT data and command surface.
 ## Upstream synchronization checklist
 
 1. Fetch `berra200/home-assistant-rapt-cloud-link`.
-2. Update the fork's `main` from upstream `main`.
-3. Merge or rebase the updated `main` into
-   `brewassistant-raptcloudlink`.
+2. Review upstream changes against the fork without bypassing the branch SOP.
+3. Integrate the required upstream changes into `dev` and validate them there.
 4. Review conflicts in every BrewAssistant-modified source file listed in
    the current branch delta above.
-5. Compare `main...brewassistant-raptcloudlink` and update this
+5. Compare `main...dev` and update this
    document if the branch delta changed.
 6. Validate Python syntax and Home Assistant integration setup.
 7. In Home Assistant, verify:
@@ -355,5 +358,5 @@ fork provides the RAPT data and command surface.
 ## Maintenance rule
 
 Any future BrewAssistant-specific modification to this integration should be
-committed to `brewassistant-raptcloudlink` and documented here in the
-same change.
+committed to `dev`, validated there, promoted through `beta` to `main`,
+and documented here in the same change.
