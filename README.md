@@ -9,7 +9,8 @@
 > domain. See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for the complete
 > change history, current limitations and upstream synchronization checklist.
 >
-> Development branch: `brewassistant-raptcloudlink`  
+> Development branch: `dev`  
+> Branch model: `dev` → `beta` → `main`  
 > Upstream: [`berra200/home-assistant-rapt-cloud-link`](https://github.com/berra200/home-assistant-rapt-cloud-link)  
 > BrewAssistant beta.12 requires this fork's **operational profile runtime**, not the upstream-only `main` code.
 
@@ -67,7 +68,7 @@ The BrewAssistant-specific adaptations are maintained by
    or its credentials**. Back up first.
 4. Enable prereleases if your HACS version requires it, and explicitly install
    tag `v2026.10.0b2` from this fork's published GitHub prerelease. Do not
-   install the untagged `main`, `brewassistant-*` or `release/...` development branch
+   install untagged `dev`, `beta` or `main` branches
    for a physical test.
 5. Restart Home Assistant while the BrewZilla is inactive. Confirm the installed
    `custom_components/rapt_cloud_link/manifest.json` says `2026.10.0b2`.
