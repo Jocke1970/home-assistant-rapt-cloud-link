@@ -16,15 +16,16 @@ def coordinator_logic():
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
     wanted = {"_has_active_profile", "_clean_profile_stop"}
     helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]
-    interval = next(node for node in tree.body if isinstance(node, ast.Assign)
-                    and any(isinstance(target, ast.Name) and target.id == "ACTIVE_PROFILE_POLL_INTERVAL"
-                            for target in node.targets))
+    intervals = [node for node in tree.body if isinstance(node, ast.Assign)
+                 and any(isinstance(target, ast.Name) and target.id in {
+                     "BREWZILLA_IDLE_POLL_INTERVAL", "ACTIVE_PROFILE_POLL_INTERVAL"
+                 } for target in node.targets)]
     cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                and node.name == "BrewZillaDataUpdateCoordinator")
     methods = [node for node in cls.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                and node.name in {"_annotate_profile_handoff", "_async_update_data"}]
     namespace = {"timedelta": timedelta, "BrewZillaAPI": object, "UpdateFailed": RuntimeError}
-    exec(compile(ast.Module(body=[interval, *helpers, *methods], type_ignores=[]), str(SOURCE), "exec"), namespace)
+    exec(compile(ast.Module(body=[*intervals, *helpers, *methods], type_ignores=[]), str(SOURCE), "exec"), namespace)
     return namespace
 
 
@@ -39,10 +40,10 @@ class StubAPI:
 
 
 class StubCoordinator:
-    def __init__(self, logic, devices, interval=timedelta(minutes=3)):
+    def __init__(self, logic, devices, interval=timedelta(seconds=30)):
         self.api = StubAPI(devices)
-        self._idle_update_interval = interval
-        self.update_interval = interval
+        self._idle_update_interval = min(interval, logic["BREWZILLA_IDLE_POLL_INTERVAL"])
+        self.update_interval = self._idle_update_interval
         self._last_active_session = {}
         self._clean_stop_polls = {}
         self._annotate_profile_handoff = types.MethodType(logic["_annotate_profile_handoff"], self)
@@ -68,10 +69,10 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         coordinator = StubCoordinator(logic, [active()])
         result = await logic["_async_update_data"](coordinator)
         self.assertIn("bz", result)
-        self.assertEqual(coordinator.update_interval, timedelta(seconds=60))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
         coordinator.api.devices = [{**active(), "activeProfileStepId": None}]
         await logic["_async_update_data"](coordinator)
-        self.assertEqual(coordinator.update_interval, timedelta(seconds=60))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
 
     async def test_two_clean_connected_polls_required_to_attest_stop(self):
         logic = coordinator_logic()
@@ -80,12 +81,12 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         coordinator.api.devices = [inactive()]
         first = await logic["_async_update_data"](coordinator)
         self.assertIs(first["bz"]["_baProfileStopConfirmed"], False)
-        self.assertEqual(coordinator.update_interval, timedelta(seconds=60))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
         coordinator.api.devices = [inactive()]
         second = await logic["_async_update_data"](coordinator)
         self.assertIs(second["bz"]["_baProfileStopConfirmed"], True)
         self.assertEqual(second["bz"]["_baStoppedSessionId"], "run")
-        self.assertEqual(coordinator.update_interval, timedelta(minutes=3))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
 
     async def test_missing_or_disconnected_payload_cannot_confirm_stop(self):
         logic = coordinator_logic()
@@ -109,7 +110,7 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
             await logic["_async_update_data"](coordinator)
         self.assertEqual(coordinator._last_active_session["bz"], "run")
         self.assertEqual(coordinator._clean_stop_polls.get("bz"), 0)
-        self.assertEqual(coordinator.update_interval, timedelta(seconds=60))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
 
     async def test_anonymous_new_session_cannot_attest_old_run_stop(self):
         logic = coordinator_logic()
@@ -130,7 +131,13 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         for _ in range(3):
             coordinator.api.devices = [inactive()]
             self.assertFalse((await logic["_async_update_data"](coordinator))["bz"]["_baProfileStopConfirmed"])
-        self.assertEqual(coordinator.update_interval, timedelta(minutes=3))
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
+
+    async def test_default_idle_poll_is_clamped_to_30_seconds(self):
+        logic = coordinator_logic()
+        coordinator = StubCoordinator(logic, [inactive()], interval=timedelta(minutes=3))
+        await logic["_async_update_data"](coordinator)
+        self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
 
     async def test_faster_operator_setting_preserved(self):
         logic = coordinator_logic()
