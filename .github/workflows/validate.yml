@@ -3,15 +3,15 @@ name: Validate
 on:
   push:
     branches:
+      - dev
+      - beta
       - main
-      - brewassistant-raptcloudlink
-      - 'release/**'
     tags:
       - 'v*'
   pull_request:
     branches:
+      - beta
       - main
-      - brewassistant-raptcloudlink
   workflow_dispatch:
 
 jobs:
