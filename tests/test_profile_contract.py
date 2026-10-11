@@ -19,9 +19,13 @@ PKG = ROOT / "custom_components" / "rapt_cloud_link"
 def normalizer():
     source = (PKG / "binary_sensor.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_profile_context")
-    namespace = {"Any": Any, "MAX_PROFILE_STEPS": 32}
-    exec(compile(ast.Module(body=[function], type_ignores=[]), "binary_sensor.py", "exec"), namespace)
+    # Extract dependencies too: profile context now normalizes bounded
+    # step alerts without importing a live Home Assistant installation.
+    wanted = {"_profile_context", "_compact_alerts"}
+    functions = [node for node in tree.body
+                 if isinstance(node, ast.FunctionDef) and node.name in wanted]
+    namespace = {"Any": Any, "MAX_PROFILE_STEPS": 32, "MAX_PROFILE_ALERTS": 16}
+    exec(compile(ast.Module(body=functions, type_ignores=[]), "binary_sensor.py", "exec"), namespace)
     return namespace["_profile_context"]
 
 
