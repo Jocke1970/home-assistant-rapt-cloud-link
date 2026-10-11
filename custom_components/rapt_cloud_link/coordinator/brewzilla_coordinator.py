@@ -1,7 +1,7 @@
 """BrewZilla cloud coordinator; never infer STOP from a failed poll."""
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from .base_coordinator import BaseRaptCoordinator
 from ..api.brewzilla_api import BrewZillaAPI
@@ -65,6 +65,16 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
                           (device.get("activeProfileId") or session.get("profileId")))
             device["_baProfileStopConfirmed"] = False
             device["_baStoppedSessionId"] = None
+            # A successful cloud poll can report the *same* profile step for
+            # minutes. Its HA last_updated then stays old despite healthy
+            # polling. Publish a real per-poll observation timestamp instead.
+            # Only a connected active profile is a current observation;
+            # missing/offline is never evidence of STOP or a fresh session.
+            device["_baProfileObservedAt"] = (
+                datetime.now(timezone.utc).isoformat()
+                if active and str(device.get("connectionState") or "").casefold() == "connected"
+                else None
+            )
             if active:
                 session_id = session.get("id")
                 # A new anonymous active session must invalidate earlier STOP

@@ -96,6 +96,8 @@ class ProfileContractTest(unittest.TestCase):
         self.assertIn('"rapt_cloud_link_brewzilla_profile_runtime"', entity)
         self.assertIn('"profile_contract_complete"', entity)
         self.assertIn('"profile_session_id"', entity)
+        self.assertIn('"profile_observed_at"', entity)
+        self.assertIn('device.get("_baProfileObservedAt")', entity)
         self.assertIn('"step_target_temperature"', entity)
 
     def test_prerelease_version(self):
