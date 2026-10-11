@@ -8,6 +8,38 @@ from .base import BaseRaptEntity
 from .const import DOMAIN
 
 MAX_PROFILE_STEPS = 32
+MAX_PROFILE_ALERTS = 16
+
+
+def _compact_alerts(raw: Any) -> list[dict[str, Any]]:
+    """Expose only bounded read-only RAPT alerts; no guessed trigger meaning."""
+    if not isinstance(raw, list):
+        return []
+    rows = []
+    for alert in raw:
+        if not isinstance(alert, dict) or not alert.get("alertText"):
+            continue
+        rows.append({
+            "id": alert.get("id"),
+            "text": str(alert["alertText"])[:180],
+            "trigger": alert.get("trigger"),
+            "length_raw": alert.get("length"),
+            "temperature": alert.get("temperature"),
+            "operator": alert.get("operator"),
+        })
+        if len(rows) >= MAX_PROFILE_ALERTS:
+            break
+    return rows
+
+
+def _profile_step_progress(device: dict[str, Any]) -> Any:
+    """Pass through RAPT telemetry's raw counter without inventing units."""
+    telemetry = device.get("telemetry")
+    if isinstance(telemetry, list):
+        telemetry = next((x for x in telemetry if isinstance(x, dict)), {})
+    return telemetry.get("profileStepProgress") if isinstance(telemetry, dict) else None
+
+
 
 
 def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
@@ -57,6 +89,7 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
             "heating_utilisation": step.get("heatingUtilisation"),
             "pid_enabled": step.get("pidEnabled"),
             "sensor_differential": step.get("sensorDifferential"),
+            "alerts": _compact_alerts(step.get("alerts")),
         })
     current_order = current_step.get("order")
     if isinstance(current_order, int):
@@ -73,6 +106,9 @@ def _profile_context(device: dict[str, Any]) -> dict[str, Any]:
         "profile_session_id": session.get("id"),
         "profile_session_start_date": session.get("startDate"),
         "profile_length": session.get("profileLength"),
+        "profile_current_time_raw": session.get("currentProfileTime"),
+        "profile_remaining_time_raw": session.get("remainingProfileTime"),
+        "step_alerts": _compact_alerts(current_step.get("alerts")),
         "step_id": step_id,
         "step_number": current_step_number,
         "step_name": current_step.get("name"),
@@ -137,6 +173,11 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "profile_session_id": context.get("profile_session_id"),
             "profile_session_start_date": context.get("profile_session_start_date"),
             "profile_length": context.get("profile_length"),
+            "profile_current_time_raw": context.get("profile_current_time_raw"),
+            "profile_remaining_time_raw": context.get("profile_remaining_time_raw"),
+            "profile_step_progress_raw": _profile_step_progress(device),
+            "profile_step_transition_observed_at": device.get("_baStepTransitionObservedAt"),
+            "step_alerts": context.get("step_alerts", []),
             "step_id": context.get("step_id"),
             "step_number": context.get("step_number"),
             "step_name": context.get("step_name"),
