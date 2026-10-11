@@ -96,12 +96,14 @@ class ProfileContractTest(unittest.TestCase):
         self.assertIn('"rapt_cloud_link_brewzilla_profile_runtime"', entity)
         self.assertIn('"profile_contract_complete"', entity)
         self.assertIn('"profile_session_id"', entity)
+        self.assertIn('"profile_observed_at"', entity)
+        self.assertIn('device.get("_baProfileObservedAt")', entity)
         self.assertIn('"step_target_temperature"', entity)
 
     def test_prerelease_version(self):
         manifest = json.loads((PKG / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["domain"], "rapt_cloud_link")
-        self.assertEqual(manifest["version"], "2026.10.0b3")
+        self.assertEqual(manifest["version"], "2026.10.0b4")
         self.assertTrue((PKG / "services.yaml").exists())
 
 
