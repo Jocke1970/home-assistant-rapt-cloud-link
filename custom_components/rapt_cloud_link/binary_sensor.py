@@ -124,6 +124,10 @@ class BrewZillaProfileActiveBinarySensor(BaseRaptEntity, BinarySensorEntity):
             "raw_device_id": self._device_id,
             "profile_active": bool(context.get("active")),
             "profile_contract_complete": bool(context.get("contract_complete")),
+            # Last successful connected API observation of this active
+            # profile. Unlike last_updated this advances with each poll,
+            # even if RAPT correctly stays on the same Mash Rest step.
+            "profile_observed_at": device.get("_baProfileObservedAt"),
             # STOP is NOT the inverse of active: two clean connected API polls
             # after the same known session are needed. No commands issued here.
             "profile_stop_confirmed": device.get("_baProfileStopConfirmed") is True,
