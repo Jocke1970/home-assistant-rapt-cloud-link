@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import types
 import unittest
@@ -24,7 +24,10 @@ def coordinator_logic():
                and node.name == "BrewZillaDataUpdateCoordinator")
     methods = [node for node in cls.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                and node.name in {"_annotate_profile_handoff", "_async_update_data"}]
-    namespace = {"timedelta": timedelta, "BrewZillaAPI": object, "UpdateFailed": RuntimeError}
+    namespace = {
+        "datetime": datetime, "timezone": timezone, "timedelta": timedelta,
+        "BrewZillaAPI": object, "UpdateFailed": RuntimeError,
+    }
     exec(compile(ast.Module(body=[*intervals, *helpers, *methods], type_ignores=[]), str(SOURCE), "exec"), namespace)
     return namespace
 
@@ -73,6 +76,34 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         coordinator.api.devices = [{**active(), "activeProfileStepId": None}]
         await logic["_async_update_data"](coordinator)
         self.assertEqual(coordinator.update_interval, timedelta(seconds=30))
+
+    async def test_profile_heartbeat_updates_without_a_step_or_temperature_change(self):
+        logic = coordinator_logic()
+        coordinator = StubCoordinator(logic, [active()])
+        first = (await logic["_async_update_data"](coordinator))["bz"]
+        observed = first["_baProfileObservedAt"]
+        self.assertIsNotNone(observed)
+        self.assertLess(abs((datetime.now(timezone.utc) -
+                            datetime.fromisoformat(observed)).total_seconds()), 5)
+
+        # A fresh connected API result can contain exactly the same step.
+        coordinator.api.devices = [active()]
+        again = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertEqual(again["activeProfileStepId"], first["activeProfileStepId"])
+        self.assertIsNotNone(again["_baProfileObservedAt"])
+        self.assertGreaterEqual(again["_baProfileObservedAt"], observed)
+
+        # A cached active session returned by an offline device is not
+        # fresh and must not create a positive profile heartbeat.
+        coordinator.api.devices = [{**active(), "connectionState": "Disconnected"}]
+        offline = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(offline["_baProfileObservedAt"])
+        self.assertFalse(offline["_baProfileStopConfirmed"])
+
+        # Failed API poll cannot publish a new current profile observation.
+        coordinator.api.devices = TimeoutError("offline")
+        with self.assertRaises(RuntimeError):
+            await logic["_async_update_data"](coordinator)
 
     async def test_two_clean_connected_polls_required_to_attest_stop(self):
         logic = coordinator_logic()
