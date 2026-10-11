@@ -60,14 +60,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Publish RCL 2026.10.0b4 HACS prerelease
+      - name: Publish RCL 2026.10.0b5 HACS prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           version="$(python -c 'import json; print(json.load(open("custom_components/rapt_cloud_link/manifest.json"))["version"])')"
-          test "${version}" = "2026.10.0b4"
+          test "${version}" = "2026.10.0b5"
           tag="v${version}"
           if gh release view "${tag}" >/dev/null 2>&1; then
             echo "Existing ${tag} is immutable; refusing to repoint it."
@@ -77,5 +77,5 @@ jobs:
           gh release create "${tag}" \
             --target "${GITHUB_SHA}" \
             --title "RAPT Cloud Link ${version}" \
-            --notes-file docs/releases/2026.10.0b4_sv.md \
+            --notes-file docs/releases/2026.10.0b5_sv.md \
             --prerelease
