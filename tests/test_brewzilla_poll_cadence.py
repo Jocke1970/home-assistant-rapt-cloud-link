@@ -49,6 +49,7 @@ class StubCoordinator:
         self.update_interval = self._idle_update_interval
         self._last_active_session = {}
         self._clean_stop_polls = {}
+        self._step_observations = {}
         self._annotate_profile_handoff = types.MethodType(logic["_annotate_profile_handoff"], self)
 
     async def _get_token_and_api(self, _api_class):
@@ -104,6 +105,40 @@ class BrewZillaCadenceTest(unittest.IsolatedAsyncioTestCase):
         coordinator.api.devices = TimeoutError("offline")
         with self.assertRaises(RuntimeError):
             await logic["_async_update_data"](coordinator)
+
+    async def test_profile_timer_anchor_only_after_contiguous_real_step_change(self):
+        logic = coordinator_logic()
+        coordinator = StubCoordinator(logic, [active()])
+        first = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(first["_baStepTransitionObservedAt"])
+
+        coordinator.api.devices = [active()]
+        same = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(same["_baStepTransitionObservedAt"])
+
+        coordinator.api.devices = [{**active(), "activeProfileStepId": "s2"}]
+        changed = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNotNone(changed["_baStepTransitionObservedAt"])
+
+        coordinator.api.devices = [{**active(), "activeProfileStepId": "s2"}]
+        unchanged = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertEqual(unchanged["_baStepTransitionObservedAt"],
+                         changed["_baStepTransitionObservedAt"])
+
+        coordinator.api.devices = [{**active(), "connectionState": "Disconnected",
+                                    "activeProfileStepId": "s2"}]
+        offline = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(offline["_baStepTransitionObservedAt"])
+        coordinator.api.devices = [{**active(), "activeProfileStepId": "s3"}]
+        reconnected = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(reconnected["_baStepTransitionObservedAt"])
+
+        coordinator.api.devices = TimeoutError("offline")
+        with self.assertRaises(RuntimeError):
+            await logic["_async_update_data"](coordinator)
+        coordinator.api.devices = [{**active(), "activeProfileStepId": "s4"}]
+        after_failed_poll = (await logic["_async_update_data"](coordinator))["bz"]
+        self.assertIsNone(after_failed_poll["_baStepTransitionObservedAt"])
 
     async def test_two_clean_connected_polls_required_to_attest_stop(self):
         logic = coordinator_logic()
