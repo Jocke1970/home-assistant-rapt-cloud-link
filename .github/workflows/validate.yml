@@ -48,3 +48,34 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+
+  publish-beta:
+    # Release only after all beta-SHA checks pass; tag must remain immutable.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/beta'
+    needs: [python-regression, validate-hassfest, validate-hacs]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish RCL 2026.10.0b4 HACS prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import json; print(json.load(open("custom_components/rapt_cloud_link/manifest.json"))["version"])')"
+          test "${version}" = "2026.10.0b4"
+          tag="v${version}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Existing ${tag} is immutable; refusing to repoint it."
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha')" = "${GITHUB_SHA}"
+            exit 0
+          fi
+          gh release create "${tag}" \
+            --target "${GITHUB_SHA}" \
+            --title "RAPT Cloud Link ${version}" \
+            --notes-file docs/releases/2026.10.0b4_sv.md \
+            --prerelease
