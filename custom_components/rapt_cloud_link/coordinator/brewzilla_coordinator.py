@@ -52,6 +52,8 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
         # These are *observations*, never commands. A restart has no STOP proof.
         self._last_active_session = {}
         self._clean_stop_polls = {}
+        # Passive step transitions; never used to advance RAPT or actuate.
+        self._step_observations = {}
 
     def _annotate_profile_handoff(self, devices):
         observed = set()
@@ -75,6 +77,33 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
                 if active and str(device.get("connectionState") or "").casefold() == "connected"
                 else None
             )
+            # No timer anchor from initial observation, reconnect or
+            # changed session. A consecutive poll seeing a new step only
+            # proves an approximate transition instant (polling uncertainty).
+            device["_baStepTransitionObservedAt"] = None
+            connected = device["_baProfileObservedAt"] is not None
+            session_id = session.get("id") if active else None
+            step_id = device.get("activeProfileStepId") if active else None
+            previous = self._step_observations.get(key)
+            if connected and session_id and step_id:
+                now = datetime.now(timezone.utc)
+                evidence = (previous is not None
+                    and previous["session"] == session_id
+                    and previous["step"] != step_id
+                    and (now - previous["last"]).total_seconds() <= 90)
+                transition_at = (
+                    now.isoformat() if evidence
+                    else previous.get("transition_at") if previous
+                    and previous["session"] == session_id and previous["step"] == step_id
+                    else None
+                )
+                self._step_observations[key] = {
+                    "session": session_id, "step": step_id,
+                    "last": now, "transition_at": transition_at,
+                }
+                device["_baStepTransitionObservedAt"] = transition_at
+            else:
+                self._step_observations.pop(key, None)
             if active:
                 session_id = session.get("id")
                 # A new anonymous active session must invalidate earlier STOP
@@ -98,6 +127,7 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
         # its STOP proof, even if the next response reports it as connected.
         for key in self._last_active_session.keys() - observed:
             self._clean_stop_polls[key] = 0
+            self._step_observations.pop(key, None)
 
     async def _async_update_data(self):
         try:
@@ -131,6 +161,8 @@ class BrewZillaDataUpdateCoordinator(BaseRaptCoordinator):
             # after a timeout, malformed payload or other failed update.
             for key in self._last_active_session:
                 self._clean_stop_polls[key] = 0
+            # Do not project timer anchors through a failed or ambiguous poll.
+            self._step_observations.clear()
             raise UpdateFailed(f"Failed to fetch BrewZilla data: {err}") from err
 
     async def _refresh_profile_status_after_command(self, operation: str):
